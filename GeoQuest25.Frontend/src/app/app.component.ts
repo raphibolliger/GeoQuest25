@@ -13,13 +13,13 @@ import { delay } from 'rxjs';
 export class AppComponent {
   readonly #httpClient = inject(HttpClient);
 
-  readonly #visited = this.#httpClient.get<GeoJSON.FeatureCollection>('/assets/visited-97af0229-7fa9-4ace-b011-b1594cc3e63e.geojson').subscribe((data) => {
+  readonly #visited = this.#httpClient.get<GeoJSON.FeatureCollection>('./assets/visited-97af0229-7fa9-4ace-b011-b1594cc3e63e.geojson').subscribe((data) => {
     console.log(data);
     this.visitedData.set(data);
   });
 
   readonly #todo = this.#httpClient
-    .get<GeoJSON.FeatureCollection>('/assets/todo-3d8ac21d-df14-47e8-b181-5df77ca808e6.geojson')
+    .get<GeoJSON.FeatureCollection>('./assets/todo-3d8ac21d-df14-47e8-b181-5df77ca808e6.geojson')
     .pipe(delay(7000))
     .subscribe((data) => {
       console.log(data);

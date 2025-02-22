@@ -35,13 +35,12 @@ jobs:
         run: |
           cd GeoQuest25.Frontend
           npm install
-          npm run build -- --base-href=/GeoQuest2025/
+          npm run build -- --base-href=/GeoQuest25/
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
           path: './GeoQuest25.Frontend/dist/geo-quest25/browser'
       - name: Deploy to GitHub Pages
         id: deployment

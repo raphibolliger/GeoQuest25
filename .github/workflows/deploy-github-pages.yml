@@ -35,7 +35,7 @@ jobs:
         run: |
           cd GeoQuest25.Frontend
           npm install
-          npm run build
+          npm run build -- --base-href=/GeoQuest2025/
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact

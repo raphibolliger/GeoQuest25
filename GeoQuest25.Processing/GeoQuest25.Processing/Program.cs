@@ -11,7 +11,6 @@ using ProjNet.CoordinateSystems.Transformations;
 
 // transform
 var transformer = CreateCoordinateTransformer();
-TestTransformation(transformer);
 
 // read shapefile
 var shapeFilePath = "/Users/raphi/Downloads/swissboundaries_gemeinden_3d_2025-01_2056_5728.shp/swissBOUNDARIES3D_1_5_TLM_HOHEITSGEBIET.shp";
@@ -65,6 +64,7 @@ var points = gpxPoints.SelectMany(p => p).ToList();
 Console.WriteLine($"Number of points: {points.Count}");
 
 var visited = new ConcurrentBag<Feature>();
+var todo = new ConcurrentBag<Feature>();
 
 Parallel.ForEach(gemeinden, gemeinde =>
 {
@@ -73,7 +73,6 @@ Parallel.ForEach(gemeinden, gemeinde =>
     {
         if (gemeinde.Geometry.Contains(point))
         {
-            visited.Add(gemeinde);
             wasThere = true;
             break; // Weiter zum nächsten Punkt, da ein Punkt nur in einer Gemeinde liegen kann
         }
@@ -81,12 +80,16 @@ Parallel.ForEach(gemeinden, gemeinde =>
     
     var icon = wasThere ? "✅" : "❌";
     Console.WriteLine($"{icon}️ {gemeinde.Attributes["NAME"]}");
+    if (wasThere)
+        visited.Add(gemeinde);
+    else
+        todo.Add(gemeinde);
 });
 
-Console.WriteLine($"Number of visited gemeinden: {visited.Count}");
+Console.WriteLine($"Besuchte: {visited.Count}    --    Noch offen: {todo.Count}");
 
-var outputPath = "/Users/raphi/Downloads/visited_gemeinden.geojson";
-GenerateGeoJson(gemeinden, visited.ToList(), outputPath);
+GenerateGeoJson(visited.ToList(), $"/Users/raphi/Downloads/visited-{Guid.NewGuid()}.geojson");
+GenerateGeoJson(todo.ToList(), $"/Users/raphi/Downloads/todo-{Guid.NewGuid()}.geojson");
 
 static async Task<Point[]> ReadGpxFile(string gpxFilePath)
 {
@@ -165,17 +168,11 @@ static ICoordinateTransformation CreateCoordinateTransformer()
     return ctf.CreateFromCoordinateSystems(ch1903Lv95, wgs84);
 }
 
-static void GenerateGeoJson(List<Feature> allGemeinden, List<Feature> visitedGemeinden, string outputPath)
+static void GenerateGeoJson(List<Feature> features, string outputPath)
 {
     // FeatureCollection für GeoJSON erstellen
     var featureCollection = new FeatureCollection();
-
-    // Farben definieren
-    string visitedColor = "#0000FF"; // Grün
-    string notVisitedColor = "#FFFFFF"; // Weiß
-
-    // Alle Gemeinden durchlaufen und Features erstellen
-    foreach (var gemeinde in allGemeinden)
+    foreach (var gemeinde in features)
     {
         var gemeindeName = gemeinde.Attributes["NAME"].ToString();
         var feature = new Feature
@@ -183,13 +180,7 @@ static void GenerateGeoJson(List<Feature> allGemeinden, List<Feature> visitedGem
             Geometry = gemeinde.Geometry,
             Attributes = new AttributesTable()
         };
-        
         feature.Attributes.Add("name", gemeindeName);
-
-        // Farbe basierend auf Besuchsstatus setzen
-        bool isVisited = visitedGemeinden.Contains(gemeinde);
-        feature.Attributes.Add("fill", isVisited ? visitedColor : notVisitedColor);
-
         featureCollection.Add(feature);
     }
 
@@ -214,17 +205,4 @@ static Coordinate TransformCoordinate(Coordinate coordinate, ICoordinateTransfor
     double correctedLon = transformed[0] - 0.0009755347103;
     double correctedLat = transformed[1] - 0.001892481137;
     return new Coordinate(correctedLon, correctedLat);
-}
-
-static void TestTransformation(ICoordinateTransformation transformer)
-{
-    var testPoint = new[] { 2600000.0, 1200000.0 };
-    var transformed = transformer.MathTransform.Transform(testPoint);
-    Console.WriteLine($"CH1903+ / LV95 (2600000, 1200000) -> WGS84: Lon={transformed[0]}, Lat={transformed[1]}");
-    Console.WriteLine($"Erwartet: Lon=7.4395833, Lat=46.9524056");
-    
-    double correctedLon = transformed[0];
-    double correctedLat = transformed[1] - 0.0005969317532;
-    Console.WriteLine($"CH1903+ / LV95 (2600000, 1200000) -> WGS84: Lon={correctedLon}, Lat={correctedLat}");
-    Console.WriteLine($"Erwartet: Lon=7.4395833, Lat=46.9524056");
 }

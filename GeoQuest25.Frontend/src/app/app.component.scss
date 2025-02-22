@@ -5,3 +5,12 @@ mgl-map {
   bottom: 0;
   left: 0;
 }
+
+.municipality {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  background-color: white;
+  padding: 0.5rem;
+  border-radius: 0.25rem;
+}

@@ -1,6 +1,23 @@
 <mgl-map [style]="'mapbox://styles/mapbox/light-v9'" [zoom]="[7.5]" [center]="[8.226667, 46.801111]">
-  @let sourceData = geoJson(); @if (sourceData) {
-  <mgl-geojson-source id="gemeinden" [data]="sourceData" [cluster]="true" [clusterMaxZoom]="15" [clusterRadius]="20"></mgl-geojson-source>
-  <mgl-layer id="gemeinden" source="gemeinden" [type]="'fill'" [paint]="paint()"></mgl-layer>
+  @let visited = visitedData(); @let todo = todoData();
+
+  <!-- visited -->
+  @if (visited) {
+  <mgl-geojson-source id="visited" [data]="visited"></mgl-geojson-source>
+  <mgl-layer id="visited" source="visited" [type]="'fill'" [paint]="visitedPaint()" (layerClick)="layerClick($event)"></mgl-layer>
+  <mgl-layer id="visited-line" source="visited" [type]="'line'" [paint]="linePaint()"></mgl-layer>
+  }
+
+  <!-- todo -->
+  @if (todo){
+  <mgl-geojson-source id="todo" [data]="todo"></mgl-geojson-source>
+  <mgl-layer id="todo" source="todo" [type]="'fill'" [paint]="todoPaint()" (layerClick)="layerClick($event)"></mgl-layer>
+  <mgl-layer id="todo-line" source="todo" [type]="'line'" [paint]="linePaint()"></mgl-layer>
   }
 </mgl-map>
+
+@if (selectedMunicipality()){
+<div class="municipality">
+  {{ selectedMunicipality() }}
+</div>
+}

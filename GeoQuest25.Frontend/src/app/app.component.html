@@ -18,6 +18,9 @@
 
 @if (selectedMunicipality()){
 <div class="municipality">
-  {{ selectedMunicipality() }}
+  {{ selectedMunicipality()?.name }} <br />
+  {{ selectedMunicipality()?.firstVisit }}
 </div>
+} @if (visitedCount() && todoCount()){
+<div class="info">{{ visitedCount() }} of {{ todoCount() }} visited</div>
 }

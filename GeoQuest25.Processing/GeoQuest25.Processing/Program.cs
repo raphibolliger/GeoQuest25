@@ -1,208 +1,84 @@
-﻿// See https://aka.ms/new-console-template for more information
-
-using System.Collections.Concurrent;
-using System.Text;
-using System.Xml.Linq;
+﻿using System.Collections.Concurrent;
+using GeoQuest25.Processing;
 using NetTopologySuite.Features;
-using NetTopologySuite.Geometries;
 using NetTopologySuite.IO;
-using ProjNet.CoordinateSystems;
-using ProjNet.CoordinateSystems.Transformations;
 
-// transform
-var transformer = CreateCoordinateTransformer();
+var shapeFileReader = new ShapeFileReader();
+var gpxFilesReader = new GpxFilesReader();
 
-// read shapefile
+// read shape file and extract all swiss municipalities
 var shapeFilePath = "/Users/raphi/Downloads/swissboundaries_gemeinden_3d_2025-01_2056_5728.shp/swissBOUNDARIES3D_1_5_TLM_HOHEITSGEBIET.shp";
-Encoding encoding = Encoding.GetEncoding("UTF-8");
-var shapefileReader = new ShapefileDataReader(shapeFilePath, new GeometryFactory(), encoding);
-var gemeinden = new List<Feature>();
-
-while (shapefileReader.Read())
-{
-    var geometry = shapefileReader.Geometry;
-    var attributes = new AttributesTable();
-    for (int i = 0; i < shapefileReader.DbaseHeader.NumFields; i++)
-    {
-        var fieldName = shapefileReader.DbaseHeader.Fields[i].Name;
-        var fieldValue = shapefileReader.GetValue(i + 1);
-        attributes.Add(fieldName, fieldValue);
-    }
-
-    var name = attributes["NAME"].ToString() ?? "";
-    var flaeche = attributes["GEM_FLAECH"]?.ToString() ?? "";
-    var seeFlaeche = attributes["SEE_FLAECH"]?.ToString() ?? "";
-
-    if (flaeche == seeFlaeche)
-    {
-        Console.WriteLine($"🌊 {name} wurde als See identifiziert und wird übersprungen.");
-        continue;
-    }
-
-    try
-    {
-        var transformedGeometry = TransformGeometry(geometry, transformer, name);
-        gemeinden.Add(new Feature(transformedGeometry, attributes));
-    }
-    catch (Exception e)
-    {
-        Console.WriteLine($"Error transforming geometry: {e.Message} - {attributes["NAME"]}");
-    }
-}
-
-Console.WriteLine($"Number of gemeinden: {gemeinden.Count}");
+var municipalities = shapeFileReader.ReadShapeFile(shapeFilePath);
+Console.WriteLine($"Number of municipalities: {municipalities.Length}");
 
 // read gpx files
 var gpxFilesPath = "/Users/raphi/Library/Mobile Documents/iCloud~com~altifondo~HealthFit/Documents";
-var gpxFiles = Directory.GetFiles(gpxFilesPath, "*.gpx").Where(f => f.Contains("Outdoor Cycling") || f.Contains("Outdoor Running") || f.Contains("Hiking")).ToList();
-var gpxPointsReadTasks = gpxFiles.Select(ReadGpxFile);
-var gpxPoints = await Task.WhenAll(gpxPointsReadTasks);
-var points = gpxPoints.SelectMany(p => p).ToList();
+var gpxFiles = await gpxFilesReader.ReadGpxFiles(gpxFilesPath);
+Console.WriteLine($"Number of gpx files: {gpxFiles.Length}");
 
-//var points = new List<Point>();
+// loop through all municipalities and check if a point of a gpx file is inside the municipality
+var visited = new ConcurrentBag<Municipality>();
+var todo = new ConcurrentBag<Municipality>();
 
-Console.WriteLine($"Number of points: {points.Count}");
-
-var visited = new ConcurrentBag<Feature>();
-var todo = new ConcurrentBag<Feature>();
-
-Parallel.ForEach(gemeinden, gemeinde =>
+Parallel.ForEach(municipalities, municipality =>
 {
-    var wasThere = false;
-    foreach (var point in points)
-    {
-        if (gemeinde.Geometry.Contains(point))
-        {
-            wasThere = true;
-            break; // Weiter zum nächsten Punkt, da ein Punkt nur in einer Gemeinde liegen kann
-        }
-    }
+    var result = IsMunicipalityVisited(municipality, gpxFiles);
     
-    var icon = wasThere ? "✅" : "❌";
-    Console.WriteLine($"{icon}️ {gemeinde.Attributes["NAME"]}");
-    if (wasThere)
-        visited.Add(gemeinde);
+    var icon = result.visited ? "✅" : "❌";
+    Console.WriteLine($"{icon}️ {municipality.Name}");
+    if (result.visited)
+    {
+        municipality.FirstVisit = result.firstVisit;
+        visited.Add(municipality);
+    }
     else
-        todo.Add(gemeinde);
+    {
+        todo.Add(municipality);
+    }
 });
 
-Console.WriteLine($"Besuchte: {visited.Count}    --    Noch offen: {todo.Count}");
+await GenerateGeoJson(visited.ToArray(), $"/Users/raphi/Downloads/visited-{Guid.NewGuid()}.geojson");
+await GenerateGeoJson(todo.ToArray(), $"/Users/raphi/Downloads/todo-{Guid.NewGuid()}.geojson");
 
-GenerateGeoJson(visited.ToList(), $"/Users/raphi/Downloads/visited-{Guid.NewGuid()}.geojson");
-GenerateGeoJson(todo.ToList(), $"/Users/raphi/Downloads/todo-{Guid.NewGuid()}.geojson");
+return;
 
-static async Task<Point[]> ReadGpxFile(string gpxFilePath)
+static (bool visited, DateOnly? firstVisit) IsMunicipalityVisited(Municipality municipality, GpxFile[] gpxFiles)
 {
-    // create text reader
-    var reader = new StreamReader(gpxFilePath);
-    var doc = await XDocument.LoadAsync(reader, LoadOptions.None, CancellationToken.None);
-    var points = new ConcurrentBag<Point>();
-    var geometryFactory = new GeometryFactory();
-
-    var trkpts = doc.Descendants().Where(x => x.Name.LocalName == "trkpt");
-
-    Parallel.ForEach(trkpts, trkpt =>
+    foreach (var gpxFile in gpxFiles)
     {
-        var latString = trkpt.Attribute("lat")?.Value;
-        var lonString = trkpt.Attribute("lon")?.Value;
-        
-        double lat = double.Parse(latString ?? "0", System.Globalization.CultureInfo.InvariantCulture);
-        double lon = double.Parse(lonString ?? "0", System.Globalization.CultureInfo.InvariantCulture);
-        points.Add(geometryFactory.CreatePoint(new Coordinate(lon, lat)));
-    });
-    
-    return points.ToArray();
-}
-
-static Geometry TransformGeometry(Geometry geometry, ICoordinateTransformation transformer, string name)
-{
-    var geometryFactory = new GeometryFactory();
-    
-    if (geometry is MultiPolygon multiPolygon)
-    {
-        var polygons = multiPolygon.Geometries.Select(g =>
+        foreach (var point in gpxFile.Points)
         {
-            if (g is not Polygon p) throw new Exception($"Unsupported geometry type. Gemeinde: {name}");
-            var coords = p.Shell.Coordinates.Select(c => TransformCoordinate(c, transformer)).ToArray();
-            return geometryFactory.CreatePolygon(coords);
-        }).ToArray();
-        return geometryFactory.CreateMultiPolygon(polygons);
+            if (municipality.Feature.Geometry.Contains(point))
+            {
+                return (true, gpxFile.Date);
+            }
+        }
     }
-    if (geometry is Polygon polygon)
-    {
-        var coords = polygon.Shell.Coordinates.Select(c => TransformCoordinate(c, transformer)).ToArray();
-        return geometryFactory.CreatePolygon(coords);
-    }
-    
-    throw new Exception($"Unsupported geometry type. Gemeinde: {name}");
+    return (false, null);
 }
 
-static ICoordinateTransformation CreateCoordinateTransformer()
-{
-    var ctf = new CoordinateTransformationFactory();
-    var csFactory = new CoordinateSystemFactory();
-
-    // CH1903+ / LV95 (EPSG:2056) Definition aus der .prj-Datei
-    string ch1903Lv95Wkt = @"
-            PROJCS[""CH1903+_LV95"",
-                GEOGCS[""GCS_CH1903+"",
-                    DATUM[""D_CH1903+"",
-                        SPHEROID[""Bessel_1841"",6377397.155,299.1528128]],
-                    PRIMEM[""Greenwich"",0.0],
-                    UNIT[""Degree"",0.0174532925199433]],
-                PROJECTION[""Hotine_Oblique_Mercator_Azimuth_Center""],
-                PARAMETER[""False_Easting"",2600000.0],
-                PARAMETER[""False_Northing"",1200000.0],
-                PARAMETER[""Scale_Factor"",1.0],
-                PARAMETER[""Azimuth"",90.0],
-                PARAMETER[""Longitude_Of_Center"",7.439583333333333],
-                PARAMETER[""Latitude_Of_Center"",46.95240555555556],
-                PARAMETER[""rectified_grid_angle"",90.0],
-                UNIT[""Meter"",1.0]]";
-    
-    var ch1903Lv95 = csFactory.CreateFromWkt(ch1903Lv95Wkt);
-
-    // Zielsystem: WGS84 (EPSG:4326)
-    var wgs84 = GeographicCoordinateSystem.WGS84;
-
-    return ctf.CreateFromCoordinateSystems(ch1903Lv95, wgs84);
-}
-
-static void GenerateGeoJson(List<Feature> features, string outputPath)
+static async Task GenerateGeoJson(Municipality[] municipalities, string outputPath)
 {
     // FeatureCollection für GeoJSON erstellen
     var featureCollection = new FeatureCollection();
-    foreach (var gemeinde in features)
+    foreach (var gemeinde in municipalities)
     {
-        var gemeindeName = gemeinde.Attributes["NAME"].ToString();
         var feature = new Feature
         {
-            Geometry = gemeinde.Geometry,
+            Geometry = gemeinde.Feature.Geometry,
             Attributes = new AttributesTable()
         };
-        feature.Attributes.Add("name", gemeindeName);
+        feature.Attributes.Add("name", gemeinde.Name);
+        if (gemeinde.FirstVisit is not null)
+            feature.Attributes.Add("firstVisit", gemeinde.FirstVisit);
         featureCollection.Add(feature);
     }
 
     // GeoJSON serialisieren
     var geoJsonWriter = new GeoJsonWriter();
-    string geoJsonString = geoJsonWriter.Write(featureCollection);
+    var geoJsonString = geoJsonWriter.Write(featureCollection);
 
     // In Datei schreiben
-    File.WriteAllText(outputPath, geoJsonString);
+    await File.WriteAllTextAsync(outputPath, geoJsonString);
     Console.WriteLine($"GeoJSON wurde nach {outputPath} geschrieben.");
-}
-
-static Coordinate TransformCoordinate(Coordinate coordinate, ICoordinateTransformation transformer)
-{
-    // original first coordinate 7.801844386861247      46.68652370661302
-    // moved first coordinate    7.80086885215094       46.68463122547609
-    
-    // factor                    0.0009755347103        0.001892481137
-    
-    
-    var transformed = transformer.MathTransform.Transform([coordinate.X, coordinate.Y]);
-    double correctedLon = transformed[0] - 0.0009755347103;
-    double correctedLat = transformed[1] - 0.001892481137;
-    return new Coordinate(correctedLon, correctedLat);
 }

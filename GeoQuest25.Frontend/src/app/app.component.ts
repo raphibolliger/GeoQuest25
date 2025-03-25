@@ -12,11 +12,11 @@ import { NgxMapboxGLModule } from 'ngx-mapbox-gl';
 export class AppComponent {
   readonly #httpClient = inject(HttpClient);
 
-  readonly #visited = this.#httpClient.get<GeoJSON.FeatureCollection>('./assets/visited-f39ea002-d30a-48d6-8f40-da740902333b.geojson').subscribe((data) => {
+  readonly #visited = this.#httpClient.get<GeoJSON.FeatureCollection>('./assets/visited-a7c0b7a2-a24f-4221-b812-a214b947cf32.geojson').subscribe((data) => {
     this.visitedData.set(data);
   });
 
-  readonly #todo = this.#httpClient.get<GeoJSON.FeatureCollection>('./assets/todo-5e2d129b-0a59-40e8-a60d-ae06b03ed4e4.geojson').subscribe((data) => {
+  readonly #todo = this.#httpClient.get<GeoJSON.FeatureCollection>('./assets/todo-ee833760-441a-45de-a414-d9082df61a01.geojson').subscribe((data) => {
     this.todoData.set(data);
   });
 

@@ -25,6 +25,7 @@ export class AppComponent {
 
   readonly visitedCount = computed(() => this.visitedData()?.features.length);
   readonly todoCount = computed(() => this.todoData()?.features.length);
+  readonly totalCount = computed(() => (this.visitedCount() ?? 0) + (this.todoCount() ?? 0));
 
   readonly selectedMunicipality = signal<{ name: string; firstVisit: string | undefined } | undefined>(undefined);
 

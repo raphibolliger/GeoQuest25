@@ -12,9 +12,21 @@ import { NgxMapboxGLModule } from 'ngx-mapbox-gl';
 export class AppComponent {
   readonly #httpClient = inject(HttpClient);
 
+  readonly mapStyleSelection = signal<'map' | 'sattelite'>('map');
+  readonly mapStyle = computed(() => {
+    switch (this.mapStyleSelection()) {
+      case 'sattelite':
+        return 'mapbox://styles/mapbox/satellite-streets-v12';
+      default:
+        return 'mapbox://styles/mapbox/streets-v12';
+    }
+  });
+
   readonly #visited = this.#httpClient.get<GeoJSON.FeatureCollection>('./assets/visited-ab519dc5-397e-4210-a775-b63df7102976.geojson').subscribe((data) => {
     this.visitedData.set(data);
   });
+
+  // readonly todoDataNew = httpResource();
 
   readonly #todo = this.#httpClient.get<GeoJSON.FeatureCollection>('./assets/todo-5a169f8a-637c-43aa-8291-37fbc6e0aeb6.geojson').subscribe((data) => {
     this.todoData.set(data);

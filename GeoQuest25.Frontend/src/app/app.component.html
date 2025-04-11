@@ -1,5 +1,5 @@
 <mgl-map [style]="mapStyle()" [zoom]="[7.5]" [center]="[8.226667, 46.801111]">
-  @let visited = visitedData(); @let todo = todoData();
+  @let visited = visitedData.value(); @let todo = todoData.value();
 
   <!-- visited -->
   @if (visited) {
@@ -9,7 +9,7 @@
   }
 
   <!-- todo -->
-  @if (todo){
+  @if (todo && !hideTodo()){
   <mgl-geojson-source id="todo" [data]="todo"></mgl-geojson-source>
   <mgl-layer id="todo" source="todo" [type]="'fill'" [paint]="todoPaint()" (layerClick)="layerClick($event)"></mgl-layer>
   <mgl-layer id="todo-line" source="todo" [type]="'line'" [paint]="linePaint()"></mgl-layer>

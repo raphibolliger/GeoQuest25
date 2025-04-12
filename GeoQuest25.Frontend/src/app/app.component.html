@@ -14,14 +14,40 @@
   <mgl-layer id="todo" source="todo" [type]="'fill'" [paint]="todoPaint()" (layerClick)="layerClick($event)"></mgl-layer>
   <mgl-layer id="todo-line" source="todo" [type]="'line'" [paint]="linePaint()"></mgl-layer>
   }
+
+  <!-- markers -->
+  @let _position = position.value(); @if (_position){
+  <mgl-marker [lngLat]="[_position.coords.longitude, _position.coords.latitude]" [offset]="[0, 0]">
+    <img src="{{ markerIcon }}" alt="marker" />
+  </mgl-marker>
+  }
 </mgl-map>
 
-@if (selectedMunicipality()){
-<div class="municipality">
-  {{ selectedMunicipality()?.name }} <br />
-  {{ selectedMunicipality()?.firstVisit }}
+<div class="left">
+  @if (selectedMunicipality()){
+  <div class="municipality">
+    {{ selectedMunicipality()?.name }} <br />
+    {{ selectedMunicipality()?.firstVisit }}
+  </div>
+  }
+  <div class="cursor-pointer" [class.animate-ping]="position.isLoading()" (click)="toggleLocation()">
+    <svg width="38" height="38" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <!-- Hintergrund (optional, um die quadratische Form zu betonen) -->
+      <rect width="100" height="100" rx="16" fill="white" [class.fill-blue-500]="showPosition()" [class.fill-red-500]="position.error()" />
+
+      <!-- Pulsierende Kreise (Live-Effekt) -->
+      <circle cx="50" cy="50" r="28" stroke="#FF3B30" stroke-width="2" fill="none" opacity="0.6" />
+      <circle cx="50" cy="50" r="38" stroke="#FF3B30" stroke-width="2" fill="none" opacity="0.3" />
+
+      <!-- Standort-Pin -->
+      <path d="M50 20C42 20 36 26 36 34C36 45.5 50 70 50 70C50 70 64 45.5 64 34C64 26 58 20 50 20Z" fill="#FF3B30" />
+
+      <!-- Kreis im Inneren (Standort-Mitte) -->
+      <circle cx="50" cy="34" r="5" fill="white" />
+    </svg>
+  </div>
 </div>
-} @if (visitedCount() && todoCount()){
+@if (visitedCount() && todoCount()){
 <div class="info">
   {{ visitedCount() }} of {{ totalCount() }} visited <br />
   {{ todoCount() }} not visited

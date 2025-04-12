@@ -6,13 +6,19 @@ mgl-map {
   left: 0;
 }
 
-.municipality {
+.left {
   position: fixed;
   top: 1rem;
   left: 1rem;
-  background-color: white;
-  padding: 0.5rem;
-  border-radius: 0.25rem;
+  display: grid;
+  grid-auto-flow: column;
+  gap: 1rem;
+
+  .municipality {
+    background-color: white;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+  }
 }
 
 .info {

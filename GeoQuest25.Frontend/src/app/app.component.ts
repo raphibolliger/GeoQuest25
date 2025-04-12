@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { httpResource } from '@angular/common/http';
-import { Component, computed, effect, signal } from '@angular/core';
+import { Component, computed, effect, resource, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NgxMapboxGLModule } from 'ngx-mapbox-gl';
 import { fromEvent } from 'rxjs';
@@ -12,12 +12,12 @@ import { fromEvent } from 'rxjs';
   styleUrl: './app.component.scss',
 })
 export class AppComponent {
-  readonly mapStyleSelection = signal<'light' | 'streets' | 'sattelite'>('light');
+  readonly mapStyleSelection = signal<'light' | 'streets' | 'satellite'>('light');
   readonly mapStyle = computed(() => {
     switch (this.mapStyleSelection()) {
       case 'streets':
         return 'mapbox://styles/mapbox/outdoors-v12';
-      case 'sattelite':
+      case 'satellite':
         return 'mapbox://styles/mapbox/satellite-streets-v12';
       default:
         return 'mapbox://styles/mapbox/light-v11';
@@ -35,15 +35,15 @@ export class AppComponent {
       } else if (key.key === '2') {
         this.mapStyleSelection.set('streets');
       } else if (key.key === '3') {
-        this.mapStyleSelection.set('sattelite');
+        this.mapStyleSelection.set('satellite');
       } else if (key.key === 'h') {
         this.hideTodo.update((prev) => !prev);
       }
     }
   });
 
-  readonly visitedData = httpResource<GeoJSON.FeatureCollection>('./assets/visited-ab519dc5-397e-4210-a775-b63df7102976.geojson');
-  readonly todoData = httpResource<GeoJSON.FeatureCollection>('./assets/todo-5a169f8a-637c-43aa-8291-37fbc6e0aeb6.geojson');
+  readonly visitedData = httpResource<GeoJSON.FeatureCollection>('./assets/visited-55dedd13-b2ad-4f56-bad8-4172c3797197.geojson');
+  readonly todoData = httpResource<GeoJSON.FeatureCollection>('./assets/todo-d8910896-8937-46f1-835b-a5941295e091.geojson');
 
   readonly visitedCount = computed(() => this.visitedData.value()?.features.length);
   readonly todoCount = computed(() => this.todoData.value()?.features.length);
@@ -64,5 +64,37 @@ export class AppComponent {
     } else {
       this.selectedMunicipality.set({ name, firstVisit: undefined });
     }
+  }
+
+  readonly markerIcon =
+    'data:image/svg+xml;charset=utf-8,' +
+    encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+      <circle cx="12" cy="12" r="8" fill="#4285F4" stroke="white" stroke-width="3"/>
+    </svg>
+  `);
+
+  geoPermissionStatus = resource({ loader: () => navigator.permissions.query({ name: 'geolocation' }) });
+
+  showPosition = signal(false);
+
+  position = resource({
+    request: () => this.showPosition(),
+    loader: (request) => {
+      if (request.request) {
+        return new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(
+            (position) => resolve(position),
+            (error) => reject(error)
+          );
+        });
+      } else {
+        return Promise.resolve(undefined);
+      }
+    },
+  });
+
+  toggleLocation(): void {
+    this.showPosition.update((prev) => !prev);
   }
 }

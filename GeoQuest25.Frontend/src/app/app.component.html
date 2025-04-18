@@ -9,7 +9,7 @@
   }
 
   <!-- todo -->
-  @if (todo && !hideTodo()){
+  @if (todo){
   <mgl-geojson-source id="todo" [data]="todo"></mgl-geojson-source>
   <mgl-layer id="todo" source="todo" [type]="'fill'" [paint]="todoPaint()" (layerClick)="layerClick($event)"></mgl-layer>
   <mgl-layer id="todo-line" source="todo" [type]="'line'" [paint]="linePaint()"></mgl-layer>

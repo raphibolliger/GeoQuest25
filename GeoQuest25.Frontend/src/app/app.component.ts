@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { Component, computed, effect, resource, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { Expression } from 'mapbox-gl';
 import { NgxMapboxGLModule } from 'ngx-mapbox-gl';
 import { fromEvent } from 'rxjs';
 
@@ -53,12 +54,23 @@ export class AppComponent {
   readonly selectedMunicipality = signal<{ name: string; firstVisit: string | undefined } | undefined>(undefined);
 
   linePaint = signal<mapboxgl.LinePaint>({ 'line-color': '#000000', 'line-width': 1 });
-  visitedPaint = signal<mapboxgl.FillPaint>({ 'fill-color': '#0000FF', 'fill-opacity': 0.5 });
-  todoPaint = signal<mapboxgl.FillPaint>({ 'fill-color': '#FFFFFF', 'fill-opacity': 0.5 });
+
+  visitedPaint = computed<mapboxgl.FillPaint>(() => {
+    const hideTodo = this.hideTodo();
+    const fillExpression: Expression = ['case', ['==', ['get', 'name'], this.selectedMunicipality()?.name ?? ''], '#FFFF00', '#0000FF'];
+    return { 'fill-color': fillExpression, 'fill-opacity': hideTodo ? 0.2 : 0.5 };
+  });
+
+  todoPaint = computed<mapboxgl.FillPaint>(() => {
+    const hideTodo = this.hideTodo();
+    const fillExpression: Expression = ['case', ['==', ['get', 'name'], this.selectedMunicipality()?.name ?? ''], '#FF0000', hideTodo ? 'transparent' : '#FFFFFF'];
+    return { 'fill-color': fillExpression, 'fill-opacity': hideTodo ? 0.2 : 0.5 };
+  });
 
   layerClick($event: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] | undefined } & mapboxgl.EventData): void {
-    const name = $event.features?.[0].properties?.['name'];
-    const firstVisit = $event.features?.[0].properties?.['firstVisit'];
+    const properties = $event.features?.[0].properties;
+    const name = properties?.['name'];
+    const firstVisit = properties?.['firstVisit'];
     if (firstVisit) {
       this.selectedMunicipality.set({ name, firstVisit });
     } else {

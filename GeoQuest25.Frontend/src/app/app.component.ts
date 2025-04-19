@@ -43,8 +43,8 @@ export class AppComponent {
     }
   });
 
-  readonly visitedData = httpResource<GeoJSON.FeatureCollection>('./assets/visited-60ed980b-687f-43af-8fb5-473c4752de54.geojson');
-  readonly todoData = httpResource<GeoJSON.FeatureCollection>('./assets/todo-d1ccddea-472a-4126-8461-73512b7a5735.geojson');
+  readonly visitedData = httpResource<GeoJSON.FeatureCollection>('./assets/visited-ae26014d-5adb-43d2-8994-127cd4733640.geojson');
+  readonly todoData = httpResource<GeoJSON.FeatureCollection>('./assets/todo-2a6f890f-5375-4dae-9755-ee6b19708de6.geojson');
 
   readonly visitedCount = computed(() => this.visitedData.value()?.features.length);
   readonly todoCount = computed(() => this.todoData.value()?.features.length);

@@ -125,5 +125,6 @@ namespace GeoQuest25.Processing
         public required string Name { get; init; }
         public required Feature Feature { get; init; }
         public DateOnly? FirstVisit { get; set; }
+        public bool IsPlanned { get; set; }
     }
 }

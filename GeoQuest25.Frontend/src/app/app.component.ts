@@ -43,8 +43,8 @@ export class AppComponent {
     }
   });
 
-  readonly visitedData = httpResource<GeoJSON.FeatureCollection>('./assets/visited-ffefd3a5-a055-491e-a4f5-4abbaf8b8ccd.geojson');
-  readonly todoData = httpResource<GeoJSON.FeatureCollection>('./assets/todo-3e37e91d-674e-4eac-8780-d9538ba5e05e.geojson');
+  readonly visitedData = httpResource<GeoJSON.FeatureCollection>('./assets/visited-56e04edf-f005-4432-8c30-5dab43bc6677.geojson');
+  readonly todoData = httpResource<GeoJSON.FeatureCollection>('./assets/todo-b9b30ea0-8990-40b2-8549-f6fa8eedfbf1.geojson');
 
   readonly visitedCount = computed(() => this.visitedData.value()?.features.length);
   readonly todoCount = computed(() => this.todoData.value()?.features.length);
@@ -63,7 +63,18 @@ export class AppComponent {
 
   todoPaint = computed<mapboxgl.FillPaint>(() => {
     const hideTodo = this.hideTodo();
-    const fillExpression: Expression = ['case', ['==', ['get', 'name'], this.selectedMunicipality()?.name ?? ''], '#FF0000', hideTodo ? 'transparent' : '#FFFFFF'];
+
+    const fillExpression: Expression = [
+      'case',
+      // set to red if selected
+      ['==', ['get', 'name'], this.selectedMunicipality()?.name ?? ''],
+      '#FF0000',
+      // set to green if planned
+      ['==', ['get', 'planned'], true],
+      '#00FF00',
+      // fallback to white or transparent if not visited and not planned
+      hideTodo ? 'transparent' : '#FFFFFF',
+    ];
     return { 'fill-color': fillExpression, 'fill-opacity': hideTodo ? 0.2 : 0.5 };
   });
 

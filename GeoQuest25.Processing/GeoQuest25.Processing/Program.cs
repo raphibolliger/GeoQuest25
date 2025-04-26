@@ -4,17 +4,23 @@ using NetTopologySuite.Features;
 using NetTopologySuite.IO;
 
 var shapeFileReader = new ShapeFileReader();
-var gpxFilesReader = new GpxFilesReader();
 
 // read shape file and extract all swiss municipalities
 var shapeFilePath = "/Users/raphi/Downloads/swissboundaries_gemeinden_3d_2025-01_2056_5728.shp/swissBOUNDARIES3D_1_5_TLM_HOHEITSGEBIET.shp";
 var municipalities = shapeFileReader.ReadShapeFile(shapeFilePath);
 Console.WriteLine($"Number of municipalities: {municipalities.Length}");
 
-// read gpx files
-var gpxFilesPath = "/Users/raphi/Library/Mobile Documents/iCloud~com~altifondo~HealthFit/Documents";
-var gpxFiles = await gpxFilesReader.ReadGpxFiles(gpxFilesPath);
-Console.WriteLine($"Number of gpx files: {gpxFiles.Length}");
+// read done activities gpx files
+const string doneActivitiesFolderPath = "/Users/raphi/Library/Mobile Documents/iCloud~com~altifondo~HealthFit/Documents";
+var doneActivitiesFilePaths = GpxFilesReader.GetGpxFilePaths(doneActivitiesFolderPath, true);
+var doneGpxFiles = await GpxFilesReader.ReadGpxFiles(doneActivitiesFilePaths);
+Console.WriteLine($"Number of gpx files from already done activities: {doneGpxFiles.Length}");
+
+// read planned activities gpx files
+const string plannedActivitiesFolderPath = "/Users/raphi/Library/Mobile Documents/com~apple~CloudDocs/01 Dokumente/03 Gpx Tours";
+var plannedActivitiesFilePaths = GpxFilesReader.GetGpxFilePaths(plannedActivitiesFolderPath, false);
+var plannedGpxFiles = await GpxFilesReader.ReadGpxFiles(plannedActivitiesFilePaths);
+Console.WriteLine($"Number of gpx files from planned activities: {plannedGpxFiles.Length}");
 
 // loop through all municipalities and check if a point of a gpx file is inside the municipality
 var visited = new ConcurrentBag<Municipality>();
@@ -22,10 +28,7 @@ var todo = new ConcurrentBag<Municipality>();
 
 Parallel.ForEach(municipalities, municipality =>
 {
-    var result = IsMunicipalityVisited(municipality, gpxFiles);
-    
-    var icon = result.visited ? "✅" : "❌";
-    Console.WriteLine($"{icon}️ {municipality.Name}");
+    var result = IsMunicipalityVisited(municipality, doneGpxFiles);
     if (result.visited)
     {
         municipality.FirstVisit = result.firstVisit;
@@ -33,8 +36,14 @@ Parallel.ForEach(municipalities, municipality =>
     }
     else
     {
+        municipality.IsPlanned = IsMunicipalityVisited(municipality, plannedGpxFiles).visited;
         todo.Add(municipality);
     }
+    
+    var icon = result.visited ? "✅" : "❌";
+    var output = $"{icon}  {municipality.Name}";
+    if (municipality.IsPlanned) output += " -> 🗓️";
+    Console.WriteLine(output);
 });
 
 // delete old geojson files and remove old ones
@@ -98,6 +107,8 @@ static async Task GenerateGeoJson(Municipality[] municipalities, string outputPa
         feature.Attributes.Add("name", gemeinde.Name);
         if (gemeinde.FirstVisit is not null)
             feature.Attributes.Add("firstVisit", gemeinde.FirstVisit);
+        if (gemeinde.IsPlanned)
+            feature.Attributes.Add("planned", true);
         featureCollection.Add(feature);
     }
 

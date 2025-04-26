@@ -63,7 +63,6 @@ export class AppComponent {
 
   todoPaint = computed<mapboxgl.FillPaint>(() => {
     const hideTodo = this.hideTodo();
-
     const fillExpression: Expression = [
       'case',
       // set to red if selected
@@ -79,14 +78,8 @@ export class AppComponent {
   });
 
   layerClick($event: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] | undefined } & mapboxgl.EventData): void {
-    const properties = $event.features?.[0].properties;
-    const name = properties?.['name'];
-    const firstVisit = properties?.['firstVisit'];
-    if (firstVisit) {
-      this.selectedMunicipality.set({ name, firstVisit });
-    } else {
-      this.selectedMunicipality.set({ name, firstVisit: undefined });
-    }
+    const properties = getProperties($event.features?.[0].properties);
+    this.selectedMunicipality.update((prev) => (prev?.name === properties?.name ? undefined : properties));
   }
 
   readonly markerIcon =
@@ -120,4 +113,14 @@ export class AppComponent {
   toggleLocation(): void {
     this.showPosition.update((prev) => !prev);
   }
+}
+
+function getProperties(properties: unknown): { name: string; firstVisit: string | undefined } | undefined {
+  if (properties && typeof properties === 'object') {
+    if ('name' in properties && typeof properties.name === 'string') {
+      const firstVisit = 'firstVisit' in properties && typeof properties.firstVisit === 'string' ? properties.firstVisit : undefined;
+      return { name: properties.name, firstVisit };
+    }
+  }
+  return undefined;
 }

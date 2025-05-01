@@ -97,8 +97,8 @@ export class AppComponent {
   });
 
   // resources
-  readonly visitedData = httpResource<GeoJSON.FeatureCollection>('./assets/visited-616e91c2-ac8f-4a39-8cb4-a9278382e7a2.geojson');
-  readonly todoData = httpResource<GeoJSON.FeatureCollection>('./assets/todo-8fcc3c39-0868-4339-a745-1565d563a6b7.geojson');
+  readonly visitedData = httpResource<GeoJSON.FeatureCollection>('./assets/visited-3bcd3cce-59a7-4670-979c-c7cd6bcb31bb.geojson');
+  readonly todoData = httpResource<GeoJSON.FeatureCollection>('./assets/todo-41f1727c-dcbc-46e5-bbb2-29b73b038c12.geojson');
   readonly geoPermissionStatus = resource({ loader: () => navigator.permissions.query({ name: 'geolocation' }) });
   readonly position = resource({
     request: () => this.showPosition(),

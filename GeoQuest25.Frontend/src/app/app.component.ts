@@ -18,7 +18,6 @@ const markerIcon =
   selector: 'app-root',
   imports: [CommonModule, NgxMapboxGLModule],
   templateUrl: './app.component.html',
-  styleUrl: './app.component.scss',
 })
 export class AppComponent {
   // consts
@@ -97,8 +96,8 @@ export class AppComponent {
   });
 
   // resources
-  readonly visitedData = httpResource<GeoJSON.FeatureCollection>('./assets/visited-2c636485-59c7-4fd6-b189-449d381c8a75.geojson');
-  readonly todoData = httpResource<GeoJSON.FeatureCollection>('./assets/todo-ea58a9d6-db43-4d0d-a72d-9bf4186f69e1.geojson');
+  readonly visitedData = httpResource<GeoJSON.FeatureCollection>('./assets/visited-fa450e44-bb1c-4e76-8ecd-b6583f0c2271.geojson');
+  readonly todoData = httpResource<GeoJSON.FeatureCollection>('./assets/todo-b4d40cba-e19d-4f90-b237-39b11eecc632.geojson');
   readonly geoPermissionStatus = resource({ loader: () => navigator.permissions.query({ name: 'geolocation' }) });
   readonly position = resource({
     request: () => this.showPosition(),

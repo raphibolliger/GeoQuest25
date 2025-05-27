@@ -1,4 +1,4 @@
-<mgl-map [style]="mapStyle()" [zoom]="[7.5]" [center]="[8.226667, 46.801111]">
+<mgl-map class="fixed inset-0" [style]="mapStyle()" [zoom]="[7.5]" [center]="[8.226667, 46.801111]">
   @let visited = visitedData.value(); @let todo = todoData.value();
 
   <!-- visited -->
@@ -23,9 +23,10 @@
   }
 </mgl-map>
 
-<div class="left">
+<!-- info top left (selected municipality and position control) -->
+<div class="fixed top-4 left-4 grid grid-flow-col gap-4">
   @if (selectedMunicipality()){
-  <div class="municipality">
+  <div class="bg-white p-2 rounded">
     {{ selectedMunicipality()?.name }} <br />
     {{ selectedMunicipality()?.firstVisit }}
   </div>
@@ -47,9 +48,37 @@
     </svg>
   </div>
 </div>
+
+<!-- info top right (visited and todo count) -->
 @if (visitedCount() && todoCount()){
 <div class="info">
   {{ visitedCount() }} of {{ totalCount() }} visited <br />
   {{ todoCount() }} not visited
 </div>
 }
+
+<!-- info bottom left (map styles) -->¨
+<div class="fixed bottom-4 left-4 bg-white rounded overflow-hidden">
+  <button
+    type="button"
+    class="py-2 px-4 border-r border-gray-300 cursor-pointer hover:bg-blue-500 hover:text-white transition-all duration-300"
+    [ngClass]="{ 'bg-blue-400 text-white': mapStyleSelection() === 'light' }"
+    (click)="mapStyleSelection.set('light')"
+  >
+    SHP
+  </button>
+  <button
+    class="py-2 px-4 border-r border-gray-300 cursor-pointer hover:bg-blue-500 hover:text-white transition-all duration-300"
+    [ngClass]="{ 'bg-blue-400 text-white': mapStyleSelection() === 'streets' }"
+    (click)="mapStyleSelection.set('streets')"
+  >
+    STR
+  </button>
+  <button
+    class="py-2 px-4 br-grey cursor-pointer hover:bg-blue-500 hover:text-white transition-all duration-300"
+    [ngClass]="{ 'bg-blue-400 text-white': mapStyleSelection() === 'satellite' }"
+    (click)="mapStyleSelection.set('satellite')"
+  >
+    SAT
+  </button>
+</div>

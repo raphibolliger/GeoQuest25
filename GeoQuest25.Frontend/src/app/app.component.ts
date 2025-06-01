@@ -100,9 +100,9 @@ export class AppComponent {
   readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-496dcfe7-97bb-437a-a1b6-b895a1c6fbee.geojson');
   readonly geoPermissionStatus = resource({ loader: () => navigator.permissions.query({ name: 'geolocation' }) });
   readonly position = resource({
-    request: () => ({ showPosition: this.showPosition() }),
-    loader: ({ request }) => {
-      if (request.showPosition) {
+    params: () => ({ showPosition: this.showPosition() }),
+    loader: ({ params }) => {
+      if (params.showPosition) {
         return new Promise<GeolocationPosition>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(
             (position) => resolve(position),

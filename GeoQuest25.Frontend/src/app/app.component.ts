@@ -1,9 +1,9 @@
-import { CommonModule } from '@angular/common';
+import { NgClass } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { Component, computed, linkedSignal, resource, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Expression } from 'mapbox-gl';
-import { NgxMapboxGLModule } from 'ngx-mapbox-gl';
+import { ExpressionSpecification, MapMouseEvent } from 'mapbox-gl';
+import { GeoJSONSourceComponent, LayerComponent, MapComponent, MarkerComponent } from 'ngx-mapbox-gl';
 import { fromEvent } from 'rxjs';
 
 const markerIcon =
@@ -16,7 +16,7 @@ const markerIcon =
 
 @Component({
   selector: 'app-root',
-  imports: [CommonModule, NgxMapboxGLModule],
+  imports: [NgClass, MapComponent, GeoJSONSourceComponent, LayerComponent, MarkerComponent],
   templateUrl: './app.component.html',
 })
 export class AppComponent {
@@ -76,12 +76,12 @@ export class AppComponent {
   readonly totalCount = computed(() => (this.visitedCount() ?? 0) + (this.todoCount() ?? 0));
   readonly visitedPaint = computed<mapboxgl.FillPaint>(() => {
     const showTransparent = this.#showTransparent();
-    const fillExpression: Expression = ['case', ['==', ['get', 'name'], this.selectedMunicipality()?.name ?? ''], '#FFFF00', '#0000FF'];
+    const fillExpression: ExpressionSpecification = ['case', ['==', ['get', 'name'], this.selectedMunicipality()?.name ?? ''], '#FFFF00', '#0000FF'];
     return { 'fill-color': fillExpression, 'fill-opacity': showTransparent ? 0.2 : 0.5 };
   });
   readonly todoPaint = computed<mapboxgl.FillPaint>(() => {
     const showTransparent = this.#showTransparent();
-    const fillExpression: Expression = [
+    const fillExpression: ExpressionSpecification = [
       'case',
       // set to red if selected
       ['==', ['get', 'name'], this.selectedMunicipality()?.name ?? ''],
@@ -96,13 +96,13 @@ export class AppComponent {
   });
 
   // resources
-  readonly visitedData = httpResource<GeoJSON.FeatureCollection>('./assets/visited-c7ecef6c-ff8a-4461-911a-55a645e04a34.geojson');
-  readonly todoData = httpResource<GeoJSON.FeatureCollection>('./assets/todo-496dcfe7-97bb-437a-a1b6-b895a1c6fbee.geojson');
+  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-c7ecef6c-ff8a-4461-911a-55a645e04a34.geojson');
+  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-496dcfe7-97bb-437a-a1b6-b895a1c6fbee.geojson');
   readonly geoPermissionStatus = resource({ loader: () => navigator.permissions.query({ name: 'geolocation' }) });
   readonly position = resource({
-    request: () => this.showPosition(),
-    loader: (request) => {
-      if (request.request) {
+    request: () => ({ showPosition: this.showPosition() }),
+    loader: ({ request }) => {
+      if (request.showPosition) {
         return new Promise<GeolocationPosition>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(
             (position) => resolve(position),
@@ -116,7 +116,7 @@ export class AppComponent {
   });
 
   // view actions
-  layerClick($event: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] | undefined } & mapboxgl.EventData): void {
+  layerClick($event: MapMouseEvent): void {
     const properties = getProperties($event.features?.[0].properties);
     this.selectedMunicipality.update((prev) => (prev?.name === properties?.name ? undefined : properties));
   }

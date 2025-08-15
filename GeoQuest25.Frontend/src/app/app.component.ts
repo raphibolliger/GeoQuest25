@@ -48,7 +48,7 @@ export class AppComponent {
     },
   });
 
-  readonly #showTransparent = linkedSignal<KeyboardEvent | undefined, boolean>({
+  readonly showTransparent = linkedSignal<KeyboardEvent | undefined, boolean>({
     source: this.#keydown,
     computation: (keydown, previous) => {
       // if ctrl + h is pressed, toggle the hideTodo signal
@@ -75,12 +75,12 @@ export class AppComponent {
   readonly todoCount = computed(() => this.todoData.value()?.features.length);
   readonly totalCount = computed(() => (this.visitedCount() ?? 0) + (this.todoCount() ?? 0));
   readonly visitedPaint = computed<mapboxgl.FillPaint>(() => {
-    const showTransparent = this.#showTransparent();
+    const showTransparent = this.showTransparent();
     const fillExpression: ExpressionSpecification = ['case', ['==', ['get', 'name'], this.selectedMunicipality()?.name ?? ''], '#FFFF00', '#0000FF'];
     return { 'fill-color': fillExpression, 'fill-opacity': showTransparent ? 0.2 : 0.5 };
   });
   readonly todoPaint = computed<mapboxgl.FillPaint>(() => {
-    const showTransparent = this.#showTransparent();
+    const showTransparent = this.showTransparent();
     const fillExpression: ExpressionSpecification = [
       'case',
       // set to red if selected
@@ -96,8 +96,8 @@ export class AppComponent {
   });
 
   // resources
-  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-f0a9cb58-5928-421a-bbf0-d6d66aafc039.geojson');
-  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-d2978d91-6ae5-4275-8c52-a7e13e2602e9.geojson');
+  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-35ffbd5d-0904-4326-83f0-80ea949fa2cf.geojson');
+  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-fcdce98d-a634-4917-b69a-12dd76affd47.geojson');
   readonly geoPermissionStatus = resource({ loader: () => navigator.permissions.query({ name: 'geolocation' }) });
   readonly position = resource({
     params: () => ({ showPosition: this.showPosition() }),

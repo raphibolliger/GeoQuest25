@@ -75,10 +75,18 @@
     STR
   </button>
   <button
-    class="py-2 px-4 br-grey cursor-pointer hover:bg-blue-500 hover:text-white transition-all duration-300"
+    class="py-2 px-4 br-grey border-r border-gray-300 cursor-pointer hover:bg-blue-500 hover:text-white transition-all duration-300"
     [ngClass]="{ 'bg-blue-400 text-white': mapStyleSelection() === 'satellite' }"
     (click)="mapStyleSelection.set('satellite')"
   >
     SAT
+  </button>
+
+  <button
+    class="py-2 px-4 br-grey cursor-pointer hover:bg-blue-500 hover:text-white transition-all duration-300"
+    [ngClass]="{ 'bg-green-400 text-white': showTransparent() }"
+    (click)="showTransparent.set(!showTransparent())"
+  >
+    OPC
   </button>
 </div>

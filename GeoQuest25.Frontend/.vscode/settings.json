@@ -1,31 +1,37 @@
 {
-    "editor.formatOnSave": true,
-    "editor.codeActionsOnSave": {
-      "source.organizeImports": "always"
-    },
-    "prettier.singleQuote": true,
-    "html.format.wrapAttributes": "force-aligned",
-    "html.format.indentHandlebars": true,
-    "prettier.jsxSingleQuote": true,
-    "typescript.preferences.quoteStyle": "single",
-    "typescript.preferences.importModuleSpecifier": "non-relative",
-    "javascript.preferences.quoteStyle": "single",
-    "[typescript]": {
-      "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[jsonc]": {
-      "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[html]": {
-      "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "angular-schematics.schematicsDefaultOptions": {
-      "angular-*": {
-        "externalTemplate": true
-      },
-      "angular-component": {
-        "skipDisplayBlock": true
-      }
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "always"
+  },
+  "prettier.singleQuote": true,
+  "html.format.wrapAttributes": "force-aligned",
+  "html.format.indentHandlebars": true,
+  "prettier.jsxSingleQuote": true,
+  "prettier.resolveGlobalModules": false,
+  "prettier.prettierPath": "./node_modules/prettier",
+  "typescript.preferences.quoteStyle": "single",
+  "typescript.preferences.importModuleSpecifier": "non-relative",
+  "javascript.preferences.quoteStyle": "single",
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[html]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "angular-schematics.schematicsDefaultOptions": {
+    "angular-*": {
+      "skipStyle": true,
+      "externalTemplate": true
     }
-  }
-  
+  },
+  "tailwindCSS.includeLanguages": {
+    "typescript": "html"
+  },
+  "tailwindCSS.experimental.classRegex": [
+    ["class:\\s*['\"]([^'\"]*)['\"]", 1],
+    ["\\[ngClass\\]\\s*=\\s*['\"]([^'\"]*)['\"]", 1]
+  ]
+}

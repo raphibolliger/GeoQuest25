@@ -1,0 +1,6 @@
+/* This file is only used to import Tailwind CSS styles for IntelliSense support.
+ * It does not contain any actual styles and is not used in the angular application.
+ * The actual styles are defined in the src/styles.scss file.
+ */
+
+@import "tailwindcss";

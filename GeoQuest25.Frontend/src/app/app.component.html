@@ -3,58 +3,52 @@
 
   <!-- visited -->
   @if (visited) {
-  <mgl-geojson-source id="visited" [data]="visited"></mgl-geojson-source>
-  <mgl-layer id="visited" source="visited" [type]="'fill'" [paint]="visitedPaint()" (layerClick)="layerClick($event)"></mgl-layer>
-  <mgl-layer id="visited-line" source="visited" [type]="'line'" [paint]="linePaint()"></mgl-layer>
+    <mgl-geojson-source id="visited" [data]="visited"></mgl-geojson-source>
+    <mgl-layer id="visited" source="visited" [type]="'fill'" [paint]="visitedPaint()" (layerClick)="layerClick($event)"></mgl-layer>
+    <mgl-layer id="visited-line" source="visited" [type]="'line'" [paint]="linePaint()"></mgl-layer>
   }
 
   <!-- todo -->
-  @if (todo){
-  <mgl-geojson-source id="todo" [data]="todo"></mgl-geojson-source>
-  <mgl-layer id="todo" source="todo" [type]="'fill'" [paint]="todoPaint()" (layerClick)="layerClick($event)"></mgl-layer>
-  <mgl-layer id="todo-line" source="todo" [type]="'line'" [paint]="linePaint()"></mgl-layer>
+  @if (todo) {
+    <mgl-geojson-source id="todo" [data]="todo"></mgl-geojson-source>
+    <mgl-layer id="todo" source="todo" [type]="'fill'" [paint]="todoPaint()" (layerClick)="layerClick($event)"></mgl-layer>
+    <mgl-layer id="todo-line" source="todo" [type]="'line'" [paint]="linePaint()"></mgl-layer>
   }
 
   <!-- markers -->
-  @let _position = position.value(); @if (_position){
-  <mgl-marker [lngLat]="[_position.coords.longitude, _position.coords.latitude]" [offset]="[0, 0]">
-    <img src="{{ markerIcon }}" alt="marker" />
-  </mgl-marker>
+  @if (!position.error()) {
+    @let _position = position.value();
+    @if (_position) {
+      <mgl-marker [lngLat]="[_position.coords.longitude, _position.coords.latitude]" [offset]="[0, 0]">
+        <img src="{{ markerIcon }}" alt="marker" />
+      </mgl-marker>
+    }
   }
 </mgl-map>
 
 <!-- info top left (selected municipality and position control) -->
 <div class="fixed top-4 left-4 grid grid-flow-col gap-4">
-  @if (selectedMunicipality()){
-  <div class="bg-white p-2 rounded">
-    {{ selectedMunicipality()?.name }} <br />
-    {{ selectedMunicipality()?.firstVisit }}
-  </div>
+  @if (selectedMunicipality()) {
+    <div class="bg-white p-2 rounded">
+      {{ selectedMunicipality()?.name }} <br />
+      {{ selectedMunicipality()?.firstVisit }}
+    </div>
   }
-  <div class="cursor-pointer" [class.animate-ping]="position.isLoading()" (click)="toggleLocation()">
-    <svg width="38" height="38" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-      <!-- Hintergrund (optional, um die quadratische Form zu betonen) -->
-      <rect width="100" height="100" rx="16" fill="white" [class.fill-blue-500]="showPosition()" [class.fill-red-500]="position.error()" />
-
-      <!-- Pulsierende Kreise (Live-Effekt) -->
-      <circle cx="50" cy="50" r="28" stroke="#FF3B30" stroke-width="2" fill="none" opacity="0.6" />
-      <circle cx="50" cy="50" r="38" stroke="#FF3B30" stroke-width="2" fill="none" opacity="0.3" />
-
-      <!-- Standort-Pin -->
-      <path d="M50 20C42 20 36 26 36 34C36 45.5 50 70 50 70C50 70 64 45.5 64 34C64 26 58 20 50 20Z" fill="#FF3B30" />
-
-      <!-- Kreis im Inneren (Standort-Mitte) -->
-      <circle cx="50" cy="34" r="5" fill="white" />
-    </svg>
+  <div
+    class="grid items-center justify-center aspect-square rounded p-2 cursor-pointer"
+    [ngClass]="{ 'animate-ping': position.isLoading(), 'bg-white': !showPosition(), 'bg-blue-500': showPosition(), 'bg-red-500': position.error() }"
+    (click)="toggleLocation()"
+  >
+    <span class="material-symbols-rounded text-3xl"> location_on </span>
   </div>
 </div>
 
 <!-- info top right (visited and todo count) -->
-@if (visitedCount() && todoCount()){
-<div class="fixed top-4 right-4 bg-white p-2 rounded max-w-[50%]">
-  {{ visitedCount() }} of {{ totalCount() }} visited <br />
-  {{ todoCount() }} not visited
-</div>
+@if (visitedCount() && todoCount()) {
+  <div class="fixed top-4 right-4 bg-white p-2 rounded max-w-[50%]">
+    {{ visitedCount() }} of {{ totalCount() }} visited <br />
+    {{ todoCount() }} not visited
+  </div>
 }
 
 <!-- info bottom left (map styles) -->¨
@@ -90,3 +84,10 @@
     OPC
   </button>
 </div>
+
+@let positionError = position.error();
+@if (positionError) {
+  <div class="fixed bottom-4 right-4 border-2 border-red-500 bg-red-100 shadow rounded p-2">
+    {{ positionError }}
+  </div>
+}

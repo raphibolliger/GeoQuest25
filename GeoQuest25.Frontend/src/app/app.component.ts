@@ -96,8 +96,8 @@ export class AppComponent {
   });
 
   // resources
-  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-61d493c1-2a7f-4e89-a1e8-609e534a04c7.geojson');
-  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-202376a6-16b4-406f-bb79-298906dd1212.geojson');
+  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-689a8530-94ac-484a-86a7-ab98725aec0d.geojson');
+  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-231b52b6-dc3d-4b8e-98d4-d778fc4e7838.geojson');
   readonly geoPermissionStatus = resource({ loader: () => navigator.permissions.query({ name: 'geolocation' }) });
   readonly position = resource({
     params: () => ({ showPosition: this.showPosition() }),
@@ -106,7 +106,23 @@ export class AppComponent {
         return new Promise<GeolocationPosition>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(
             (position) => resolve(position),
-            (error) => reject(error)
+            (error) => {
+              switch (error.code) {
+                case error.PERMISSION_DENIED:
+                  reject(new Error('User denied the request for Geolocation.'));
+                  break;
+                case error.POSITION_UNAVAILABLE:
+                  reject(new Error('Location information is unavailable.'));
+                  break;
+                case error.TIMEOUT:
+                  reject(new Error('The request to get user location timed out.'));
+                  break;
+                default:
+                  reject(new Error('An unknown error occurred.'));
+                  break;
+              }
+            },
+            { timeout: 5000 },
           );
         });
       } else {

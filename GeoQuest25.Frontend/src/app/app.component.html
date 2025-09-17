@@ -1,5 +1,8 @@
-<mgl-map class="fixed inset-0" [style]="mapStyle()" [zoom]="[7.5]" [center]="[8.226667, 46.801111]">
+<mgl-map #map class="fixed inset-0" [style]="mapStyle()" [zoom]="[7.5]" [center]="[8.226667, 46.801111]" [antialias]="true" (mapLoad)="onLoad($event)">
   @let visited = visitedData.value(); @let todo = todoData.value();
+
+  <mgl-raster-dem-source id="mapbox-dem" [url]="'mapbox://mapbox.mapbox-terrain-dem-v1'" [tileSize]="512" [maxzoom]="14"> </mgl-raster-dem-source>
+  <mgl-control mglNavigation position="top-right"></mgl-control>
 
   <!-- visited -->
   @if (visited) {
@@ -28,18 +31,31 @@
 
 <!-- info top left (selected municipality and position control) -->
 <div class="fixed top-4 left-4 grid grid-flow-col gap-4">
+  <!-- selected municipality -->
   @if (selectedMunicipality()) {
     <div class="bg-white p-2 rounded">
       {{ selectedMunicipality()?.name }} <br />
       {{ selectedMunicipality()?.firstVisit }}
     </div>
   }
+
+  <!-- position control -->
   <div
     class="grid items-center justify-center aspect-square rounded p-2 cursor-pointer"
     [ngClass]="{ 'animate-ping': position.isLoading(), 'bg-white': !showPosition(), 'bg-blue-500': showPosition(), 'bg-red-500': position.error() }"
     (click)="toggleLocation()"
   >
     <span class="material-symbols-rounded text-3xl"> location_on </span>
+  </div>
+
+  <!-- terrain control -->
+  <div
+    class="grid items-center justify-center aspect-square rounded p-2 cursor-pointer"
+    [ngClass]="{ 'bg-white': !showTerrain(), 'bg-green-600': showTerrain(), 'text-white': showTerrain() }"
+    (click)="showTerrain.set(!showTerrain())"
+    title="Toggle Terrain"
+  >
+    <span class="material-symbols-rounded text-3xl"> elevation </span>
   </div>
 </div>
 

@@ -1,9 +1,9 @@
 import { NgClass } from '@angular/common';
 import { httpResource } from '@angular/common/http';
-import { Component, computed, linkedSignal, resource, signal } from '@angular/core';
+import { Component, computed, effect, linkedSignal, resource, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ExpressionSpecification, MapMouseEvent } from 'mapbox-gl';
-import { GeoJSONSourceComponent, LayerComponent, MapComponent, MarkerComponent } from 'ngx-mapbox-gl';
+import { ExpressionSpecification, Map, MapEventType, MapMouseEvent } from 'mapbox-gl';
+import { ControlComponent, GeoJSONSourceComponent, LayerComponent, MapComponent, MarkerComponent, RasterDemSourceComponent } from 'ngx-mapbox-gl';
 import { fromEvent } from 'rxjs';
 
 const markerIcon =
@@ -16,7 +16,7 @@ const markerIcon =
 
 @Component({
   selector: 'app-root',
-  imports: [NgClass, MapComponent, GeoJSONSourceComponent, LayerComponent, MarkerComponent],
+  imports: [NgClass, MapComponent, GeoJSONSourceComponent, LayerComponent, MarkerComponent, RasterDemSourceComponent, ControlComponent],
   templateUrl: './app.component.html',
 })
 export class AppComponent {
@@ -30,6 +30,8 @@ export class AppComponent {
   readonly linePaint = signal<mapboxgl.LinePaint>({ 'line-color': '#000000', 'line-width': 1 });
   readonly selectedMunicipality = signal<{ name: string; firstVisit: string | undefined } | undefined>(undefined);
   readonly showPosition = signal(false);
+  readonly map = signal<Map | undefined>(undefined);
+  readonly showTerrain = signal(false);
 
   // linked signals
   readonly mapStyleSelection = linkedSignal<KeyboardEvent | undefined, 'light' | 'streets' | 'satellite'>({
@@ -44,7 +46,7 @@ export class AppComponent {
           return 'satellite';
         }
       }
-      return previous?.value ?? 'light';
+      return previous?.value ?? 'streets';
     },
   });
 
@@ -131,7 +133,22 @@ export class AppComponent {
     },
   });
 
+  // effects
+  readonly terrainEffect = effect(() => {
+    const showTerrain = this.showTerrain();
+    const map = this.map();
+    if (showTerrain) {
+      map?.setTerrain({ source: 'mapbox-dem', exaggeration: 2.5 });
+    } else {
+      map?.setTerrain(null);
+    }
+  });
+
   // view actions
+  onLoad(event: { type: MapEventType; target: Map }): void {
+    this.map.set(event.target);
+  }
+
   layerClick($event: MapMouseEvent): void {
     const properties = getProperties($event.features?.[0].properties);
     this.selectedMunicipality.update((prev) => (prev?.name === properties?.name ? undefined : properties));

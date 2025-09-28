@@ -57,6 +57,16 @@
   >
     <span class="material-symbols-rounded text-3xl"> elevation </span>
   </div>
+
+  <!-- planning control -->
+  <div
+    class="grid items-center justify-center aspect-square rounded p-2 cursor-pointer"
+    [ngClass]="{ 'bg-white': !showPlanned(), 'bg-green-600': showPlanned(), 'text-white': showPlanned() }"
+    (click)="showPlanned.set(!showPlanned())"
+    title="Toggle Planned"
+  >
+    <span class="material-symbols-rounded text-3xl"> tactic </span>
+  </div>
 </div>
 
 <!-- info top right (visited and todo count) -->

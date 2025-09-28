@@ -32,6 +32,7 @@ export class AppComponent {
   readonly showPosition = signal(false);
   readonly map = signal<Map | undefined>(undefined);
   readonly showTerrain = signal(false);
+  readonly showPlanned = signal(false);
 
   // linked signals
   readonly mapStyleSelection = linkedSignal<KeyboardEvent | undefined, 'light' | 'streets' | 'satellite'>({
@@ -89,7 +90,7 @@ export class AppComponent {
       ['==', ['get', 'name'], this.selectedMunicipality()?.name ?? ''],
       '#FF0000',
       // set to green if planned
-      ['==', ['get', 'planned'], true],
+      this.showPlanned() ? ['==', ['get', 'planned'], true] : false,
       '#00FF00',
       // fallback to white or transparent if not visited and not planned
       showTransparent ? 'transparent' : '#FFFFFF',
@@ -98,8 +99,8 @@ export class AppComponent {
   });
 
   // resources
-  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-ab9447a3-c13c-446c-abcb-61c122d1ac4c.geojson');
-  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-11e98dbd-640f-45ee-89b4-7a0e45eab4e8.geojson');
+  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-5493ed9d-3cd1-4654-b7d2-a7c4656adc20.geojson');
+  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-283d64d7-e43a-4be1-8910-25ba01898100.geojson');
   readonly geoPermissionStatus = resource({ loader: () => navigator.permissions.query({ name: 'geolocation' }) });
   readonly position = resource({
     params: () => ({ showPosition: this.showPosition() }),

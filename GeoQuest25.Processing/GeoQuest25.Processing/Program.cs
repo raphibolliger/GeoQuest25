@@ -23,8 +23,8 @@ var plannedGpxFiles = await GpxFilesReader.ReadGpxFiles(plannedActivitiesFilePat
 Console.WriteLine($"Number of gpx files from planned activities: {plannedGpxFiles.Length}");
 
 // loop through all municipalities and check if a point of a gpx file is inside the municipality
-var visited = new ConcurrentBag<Municipality>();
-var todo = new ConcurrentBag<Municipality>();
+var visitedBag = new ConcurrentBag<Municipality>();
+var todoBag = new ConcurrentBag<Municipality>();
 
 Parallel.ForEach(municipalities, municipality =>
 {
@@ -32,12 +32,12 @@ Parallel.ForEach(municipalities, municipality =>
     if (result.visited)
     {
         municipality.FirstVisit = result.firstVisit;
-        visited.Add(municipality);
+        visitedBag.Add(municipality);
     }
     else
     {
         municipality.IsPlanned = IsMunicipalityVisited(municipality, plannedGpxFiles).visited;
-        todo.Add(municipality);
+        todoBag.Add(municipality);
     }
     
     var icon = result.visited ? "✅" : "❌";
@@ -45,6 +45,27 @@ Parallel.ForEach(municipalities, municipality =>
     if (municipality.IsPlanned) output += " -> 🗓️";
     Console.WriteLine(output);
 });
+
+// SPECIAL CASE: there are two areas (tracked as municipalities) which are not realy municipalities, this areas are owned by two municipalities if one of
+// them is visited, the area is considered as visited too
+var visited = visitedBag.ToList();
+var todo = todoBag.ToList();
+
+var cadenazzoMonteceneri = visited.Any(vm => vm.Name is "Cadenazzo" or "Monteceneri");
+if (cadenazzoMonteceneri)
+{
+    var toMove = municipalities.Single(m => m.Name == "Comunanza Cadenazzo/Monteceneri");
+    todo.Remove(toMove);
+    visited.Add(toMove);
+}
+
+var capriscaLugano = visited.Any(vm => vm.Name is "Capriasca" or "Lugano");
+if (capriscaLugano)
+{
+    var toMove = municipalities.Single(m => m.Name == "Comunanza Capriasca/Lugano");
+    todo.Remove(toMove);
+    visited.Add(toMove);
+}
 
 // delete old geojson files and remove old ones
 var frontendPaht = SearchFrontendPath();

@@ -30,6 +30,7 @@
     "@angular/build": "^21.2.11",
     "@angular/cli": "^21.2.11",
     "@angular/compiler-cli": "^21.2.13",
+    "@tweakpane/core": "^2.0.5",
     "@types/jasmine": "~5.1.15",
     "@types/mapbox-gl": "^3.4.1",
     "jasmine-core": "~5.1.0",
@@ -40,6 +41,7 @@
     "karma-jasmine-html-reporter": "~2.1.0",
     "postcss": "^8.5.14",
     "prettier": "3.5.3",
+    "tweakpane": "^4.0.5",
     "typescript": "~5.9.3"
   }
 }

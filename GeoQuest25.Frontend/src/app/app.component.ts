@@ -2,7 +2,7 @@ import { NgClass } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { Component, computed, effect, linkedSignal, resource, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ExpressionSpecification, Map, MapEventType, MapMouseEvent } from 'mapbox-gl';
+import { ExpressionSpecification, FillLayerSpecification, Map, MapEventType, MapMouseEvent } from 'mapbox-gl';
 import { ControlComponent, GeoJSONSourceComponent, LayerComponent, MapComponent, MarkerComponent, RasterDemSourceComponent } from 'ngx-mapbox-gl';
 import { fromEvent } from 'rxjs';
 
@@ -27,7 +27,7 @@ export class AppComponent {
   readonly #keydown = toSignal(fromEvent<KeyboardEvent>(document, 'keydown'));
 
   // signals
-  readonly linePaint = signal<mapboxgl.LinePaint>({ 'line-color': '#000000', 'line-width': 1 });
+  readonly linePaint = signal({ 'line-color': '#000000', 'line-width': 1 });
   readonly selectedMunicipality = signal<{ name: string; firstVisit: string | undefined } | undefined>(undefined);
   readonly showPosition = signal(false);
   readonly map = signal<Map | undefined>(undefined);
@@ -77,12 +77,12 @@ export class AppComponent {
   readonly visitedCount = computed(() => this.visitedData.value()?.features.length);
   readonly todoCount = computed(() => this.todoData.value()?.features.length);
   readonly totalCount = computed(() => (this.visitedCount() ?? 0) + (this.todoCount() ?? 0));
-  readonly visitedPaint = computed<mapboxgl.FillPaint>(() => {
+  readonly visitedPaint = computed<FillLayerSpecification['paint']>(() => {
     const showTransparent = this.showTransparent();
     const fillExpression: ExpressionSpecification = ['case', ['==', ['get', 'name'], this.selectedMunicipality()?.name ?? ''], '#FFFF00', '#0000FF'];
     return { 'fill-color': fillExpression, 'fill-opacity': showTransparent ? 0.2 : 0.5 };
   });
-  readonly todoPaint = computed<mapboxgl.FillPaint>(() => {
+  readonly todoPaint = computed<FillLayerSpecification['paint']>(() => {
     const showTransparent = this.showTransparent();
     const fillExpression: ExpressionSpecification = [
       'case',
@@ -99,8 +99,8 @@ export class AppComponent {
   });
 
   // resources
-  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-7e5f8180-2b06-4eba-bc44-99d0c6ebd4c1.geojson');
-  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-6610bede-d0f4-4999-9870-733c970f69d4.geojson');
+  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-bc8ecc45-0a04-402b-a1b5-ab131614fdc6.geojson');
+  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-82a306d7-9ed1-4ec2-864c-756573222e8c.geojson');
   readonly geoPermissionStatus = resource({ loader: () => navigator.permissions.query({ name: 'geolocation' }) });
   readonly position = resource({
     params: () => ({ showPosition: this.showPosition() }),

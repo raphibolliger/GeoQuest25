@@ -1,6 +1,6 @@
 import { NgClass } from '@angular/common';
 import { httpResource } from '@angular/common/http';
-import { Component, computed, effect, linkedSignal, resource, signal } from '@angular/core';
+import { Component, computed, effect, linkedSignal, resource, signal, ChangeDetectionStrategy } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ExpressionSpecification, FillLayerSpecification, Map, MapEventType, MapMouseEvent } from 'mapbox-gl';
 import { ControlComponent, GeoJSONSourceComponent, LayerComponent, MapComponent, MarkerComponent, RasterDemSourceComponent } from 'ngx-mapbox-gl';
@@ -17,6 +17,7 @@ const markerIcon =
 @Component({
   selector: 'app-root',
   imports: [NgClass, MapComponent, GeoJSONSourceComponent, LayerComponent, MarkerComponent, RasterDemSourceComponent, ControlComponent],
+  changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './app.component.html',
 })
 export class AppComponent {
@@ -99,8 +100,8 @@ export class AppComponent {
   });
 
   // resources
-  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-29fca0ea-39d8-476a-8da7-7813b011b28d.geojson');
-  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-48598b91-cda2-4b60-a5f4-15548729808d.geojson');
+  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-5ce7c36f-26a2-4dcb-9d1f-86ab135e97f1.geojson');
+  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-bd1aa77d-c304-4aec-bf1e-8942fd7e85a2.geojson');
   readonly geoPermissionStatus = resource({ loader: () => navigator.permissions.query({ name: 'geolocation' }) });
   readonly position = resource({
     params: () => ({ showPosition: this.showPosition() }),

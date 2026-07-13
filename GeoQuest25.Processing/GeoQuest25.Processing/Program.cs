@@ -1,70 +1,126 @@
-﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using GeoQuest25.Processing;
 using NetTopologySuite.Features;
+using NetTopologySuite.Geometries;
+using NetTopologySuite.Geometries.Prepared;
+using NetTopologySuite.Index.Strtree;
 using NetTopologySuite.IO;
 
+var stopwatch = Stopwatch.StartNew();
 var shapeFileReader = new ShapeFileReader();
 
 // read shape file and extract all swiss municipalities
 var shapeFilePath = "/Users/raphi/Downloads/swissboundaries_gemeinden_3d_2025-01_2056_5728.shp/swissBOUNDARIES3D_1_5_TLM_HOHEITSGEBIET.shp";
 var municipalities = shapeFileReader.ReadShapeFile(shapeFilePath);
-Console.WriteLine($"Number of municipalities: {municipalities.Length}");
+Console.WriteLine($"Number of municipalities: {municipalities.Length} ({stopwatch.Elapsed.TotalSeconds:F1}s)");
 
-// read done activities gpx files
+// read done activities gpx files, sorted oldest first so the first match per municipality is the earliest visit
 const string doneActivitiesFolderPath = "/Users/raphi/Library/Mobile Documents/iCloud~com~altifondo~HealthFit/Documents";
 var doneActivitiesFilePaths = GpxFilesReader.GetGpxFilePaths(doneActivitiesFolderPath, true);
-var doneGpxFiles = await GpxFilesReader.ReadGpxFiles(doneActivitiesFilePaths);
-Console.WriteLine($"Number of gpx files from already done activities: {doneGpxFiles.Length}");
+var doneGpxFiles = GpxFilesReader.ReadGpxFiles(doneActivitiesFilePaths).OrderBy(f => f.Date).ToArray();
+Console.WriteLine($"Number of gpx files from already done activities: {doneGpxFiles.Length} ({stopwatch.Elapsed.TotalSeconds:F1}s)");
 
 // read planned activities gpx files
 const string plannedActivitiesFolderPath = "/Users/raphi/Library/Mobile Documents/com~apple~CloudDocs/01 Dokumente/03 Gpx Tours";
 var plannedActivitiesFilePaths = GpxFilesReader.GetGpxFilePaths(plannedActivitiesFolderPath, false);
-var plannedGpxFiles = await GpxFilesReader.ReadGpxFiles(plannedActivitiesFilePaths);
-Console.WriteLine($"Number of gpx files from planned activities: {plannedGpxFiles.Length}");
+var plannedGpxFiles = GpxFilesReader.ReadGpxFiles(plannedActivitiesFilePaths);
+Console.WriteLine($"Number of gpx files from planned activities: {plannedGpxFiles.Length} ({stopwatch.Elapsed.TotalSeconds:F1}s)");
 
-// loop through all municipalities and check if a point of a gpx file is inside the municipality
-var visitedBag = new ConcurrentBag<Municipality>();
-var todoBag = new ConcurrentBag<Municipality>();
-
-Parallel.ForEach(municipalities, municipality =>
+// prepare the municipality geometries: a prepared geometry answers point-in-polygon
+// queries via an internal index instead of rebuilding the topology graph per call
+var entries = new MunicipalityEntry[municipalities.Length];
+Parallel.For(0, municipalities.Length, i =>
 {
-    var result = IsMunicipalityVisited(municipality, doneGpxFiles);
-    if (result.visited)
+    var geometry = municipalities[i].Feature.Geometry;
+    var prepared = PreparedGeometryFactory.Prepare(geometry);
+    // the point-in-area index inside the prepared geometry is built lazily on first
+    // use; trigger it here while the instance is still confined to a single thread
+    prepared.Contains(geometry.Factory.CreatePoint(geometry.Coordinate));
+    entries[i] = new MunicipalityEntry(municipalities[i], geometry.EnvelopeInternal, prepared);
+});
+
+// spatial index so each gpx point only gets tested against the few municipalities
+// whose bounding box contains it, instead of every municipality against every point
+var municipalityIndex = new STRtree<MunicipalityEntry>();
+foreach (var entry in entries)
+    municipalityIndex.Insert(entry.Envelope, entry);
+municipalityIndex.Build();
+Console.WriteLine($"Spatial index built ({stopwatch.Elapsed.TotalSeconds:F1}s)");
+
+// done activities: files are sorted by date, so a municipality that already has a
+// FirstVisit can be skipped for all later files; the spatial index is queried once
+// per file (with the whole track's envelope), per point only cheap envelope checks
+// against the remaining candidates are needed
+foreach (var gpxFile in doneGpxFiles)
+{
+    var candidates = UnvisitedCandidates(municipalityIndex, gpxFile);
+    if (candidates.Length == 0) continue;
+
+    Parallel.ForEach(gpxFile.Points, point =>
     {
-        municipality.FirstVisit = result.firstVisit;
-        visitedBag.Add(municipality);
-    }
+        foreach (var candidate in candidates)
+        {
+            if (candidate.Municipality.FirstVisit is not null) continue;
+            if (!candidate.Envelope.Contains(point.Coordinate)) continue;
+            if (!candidate.Prepared.Contains(point)) continue;
+            lock (candidate)
+            {
+                candidate.Municipality.FirstVisit ??= gpxFile.Date;
+            }
+        }
+    });
+}
+
+// planned activities: only municipalities that are still todo are of interest
+foreach (var gpxFile in plannedGpxFiles)
+{
+    var candidates = UnvisitedCandidates(municipalityIndex, gpxFile);
+
+    Parallel.ForEach(gpxFile.Points, point =>
+    {
+        foreach (var candidate in candidates)
+        {
+            if (candidate.Municipality.IsPlanned) continue;
+            if (!candidate.Envelope.Contains(point.Coordinate)) continue;
+            if (candidate.Prepared.Contains(point))
+                candidate.Municipality.IsPlanned = true;
+        }
+    });
+}
+
+Console.WriteLine($"Matching done ({stopwatch.Elapsed.TotalSeconds:F1}s)");
+
+var visited = new List<Municipality>();
+var todo = new List<Municipality>();
+foreach (var municipality in municipalities)
+{
+    if (municipality.FirstVisit is not null)
+        visited.Add(municipality);
     else
-    {
-        municipality.IsPlanned = IsMunicipalityVisited(municipality, plannedGpxFiles).visited;
-        todoBag.Add(municipality);
-    }
-    
-    var icon = result.visited ? "✅" : "❌";
+        todo.Add(municipality);
+
+    var icon = municipality.FirstVisit is not null ? "✅" : "❌";
     var output = $"{icon}  {municipality.Name}";
     if (municipality.IsPlanned) output += " -> 🗓️";
     Console.WriteLine(output);
-});
+}
 
 // SPECIAL CASE: there are two areas (tracked as municipalities) which are not realy municipalities, this areas are owned by two municipalities if one of
 // them is visited, the area is considered as visited too
-var visited = visitedBag.ToList();
-var todo = todoBag.ToList();
-
 var cadenazzoMonteceneri = visited.Any(vm => vm.Name is "Cadenazzo" or "Monteceneri");
 if (cadenazzoMonteceneri)
 {
     var toMove = municipalities.Single(m => m.Name == "Comunanza Cadenazzo/Monteceneri");
-    todo.Remove(toMove);
-    visited.Add(toMove);
+    if (todo.Remove(toMove))
+        visited.Add(toMove);
 }
 
 var capriscaLugano = visited.Any(vm => vm.Name is "Capriasca" or "Lugano");
 if (capriscaLugano)
 {
     var toMove = municipalities.Single(m => m.Name == "Comunanza Capriasca/Lugano");
-    todo.Remove(toMove);
-    visited.Add(toMove);
+    if (todo.Remove(toMove))
+        visited.Add(toMove);
 }
 
 // delete old geojson files and remove old ones
@@ -97,21 +153,19 @@ var newAppComponentContent = appComponentContent.Replace(existingVisitedFile.Nam
 
 await File.WriteAllTextAsync(appComponentPath, newAppComponentContent);
 
+Console.WriteLine($"Finished ({stopwatch.Elapsed.TotalSeconds:F1}s)");
+
 return;
 
-static (bool visited, DateOnly? firstVisit) IsMunicipalityVisited(Municipality municipality, GpxFile[] gpxFiles)
+// the municipalities whose bounding box intersects the track's bounding box and
+// which have not been visited yet — the only ones worth testing per point
+static MunicipalityEntry[] UnvisitedCandidates(STRtree<MunicipalityEntry> index, GpxFile gpxFile)
 {
-    foreach (var gpxFile in gpxFiles)
-    {
-        foreach (var point in gpxFile.Points)
-        {
-            if (municipality.Feature.Geometry.Contains(point))
-            {
-                return (true, gpxFile.Date);
-            }
-        }
-    }
-    return (false, null);
+    var trackEnvelope = new Envelope();
+    foreach (var point in gpxFile.Points)
+        trackEnvelope.ExpandToInclude(point.Coordinate);
+
+    return index.Query(trackEnvelope).Where(c => c.Municipality.FirstVisit is null).ToArray();
 }
 
 static async Task GenerateGeoJson(Municipality[] municipalities, string outputPath)
@@ -154,8 +208,10 @@ string? SearchFrontendPath()
             var path = Path.Combine(currentDirectory, "GeoQuest25.Frontend");
             return Directory.Exists(path) ? path : null;
         }
-        
+
         currentDirectory = Directory.GetParent(currentDirectory)?.FullName;
     }
     return currentDirectory;
 }
+
+internal sealed record MunicipalityEntry(Municipality Municipality, Envelope Envelope, IPreparedGeometry Prepared);

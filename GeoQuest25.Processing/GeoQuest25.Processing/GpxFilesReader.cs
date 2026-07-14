@@ -25,6 +25,7 @@ namespace GeoQuest25.Processing
                 ActivityType.Snowboarding => "Snowboarding",
                 ActivityType.CrossCountrySkiing => "Cross Country Skiing",
                 ActivityType.Skiing => "Downhill Skiing",
+                ActivityType.Rowing => "Rowing",
                 _ => throw new ArgumentOutOfRangeException(nameof(at), at, null)
             }).ToArray();
 
@@ -91,5 +92,6 @@ namespace GeoQuest25.Processing
         Snowboarding,
         CrossCountrySkiing,
         Skiing,
+        Rowing
     }
 }

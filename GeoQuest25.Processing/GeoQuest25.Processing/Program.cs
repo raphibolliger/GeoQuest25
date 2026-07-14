@@ -15,7 +15,7 @@ var municipalities = shapeFileReader.ReadShapeFile(shapeFilePath);
 Console.WriteLine($"Number of municipalities: {municipalities.Length} ({stopwatch.Elapsed.TotalSeconds:F1}s)");
 
 // read done activities gpx files, sorted oldest first so the first match per municipality is the earliest visit
-const string doneActivitiesFolderPath = "/Users/raphi/Library/Mobile Documents/iCloud~com~altifondo~HealthFit/Documents";
+const string doneActivitiesFolderPath = "/Users/raphi/Library/CloudStorage/Dropbox-YARXGmbH/Raphael Bolliger/Apps/HealthFitExporter";
 var doneActivitiesFilePaths = GpxFilesReader.GetGpxFilePaths(doneActivitiesFolderPath, true);
 var doneGpxFiles = GpxFilesReader.ReadGpxFiles(doneActivitiesFilePaths).OrderBy(f => f.Date).ToArray();
 Console.WriteLine($"Number of gpx files from already done activities: {doneGpxFiles.Length} ({stopwatch.Elapsed.TotalSeconds:F1}s)");

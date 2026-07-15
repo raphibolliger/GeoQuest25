@@ -1,9 +1,9 @@
 import { NgClass } from '@angular/common';
 import { httpResource } from '@angular/common/http';
-import { Component, computed, effect, linkedSignal, resource, signal, ChangeDetectionStrategy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, linkedSignal, resource, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ExpressionSpecification, FillLayerSpecification, Map, MapEventType, MapMouseEvent } from 'mapbox-gl';
-import { ControlComponent, GeoJSONSourceComponent, LayerComponent, MapComponent, MarkerComponent, RasterDemSourceComponent } from 'ngx-mapbox-gl';
+import { ControlComponent, GeoJSONSourceComponent, LayerComponent, MapComponent, MarkerComponent, RasterDemSourceComponent, VectorSourceComponent } from 'ngx-mapbox-gl';
 import { fromEvent } from 'rxjs';
 
 const markerIcon =
@@ -16,7 +16,7 @@ const markerIcon =
 
 @Component({
   selector: 'app-root',
-  imports: [NgClass, MapComponent, GeoJSONSourceComponent, LayerComponent, MarkerComponent, RasterDemSourceComponent, ControlComponent],
+  imports: [NgClass, MapComponent, GeoJSONSourceComponent, LayerComponent, MarkerComponent, RasterDemSourceComponent, ControlComponent, VectorSourceComponent],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './app.component.html',
 })
@@ -34,6 +34,52 @@ export class AppComponent {
   readonly map = signal<Map | undefined>(undefined);
   readonly showTerrain = signal(false);
   readonly showPlanned = signal(false);
+  readonly showTracks = signal(false);
+
+  // the tracks file name ends with the sha256 hash of the routes secret; only the
+  // "tracks-<guid>" prefix (rewritten by the processing pipeline) is known here, the hash
+  // is derived from the ?routes=<secret> query param. the HEAD request verifies the file
+  // actually exists, so a wrong secret behaves like no secret — no url, no button.
+  // mapbox-gl detects the .pmtiles extension and loads the file via range requests,
+  // so only the tiles in view are actually downloaded
+  readonly #tracksFilePrefix = 'tracks-28036126-116d-486f-9667-f352af3b1cef';
+  readonly #tracksUrlResource = resource({
+    loader: async () => {
+      // a secret from the query param wins; a previously proven secret is remembered in
+      // localStorage so later visits work without the param
+      const secretFromUrl = new URLSearchParams(window.location.search).get('routes');
+      const storedSecret = localStorage.getItem('routesSecret');
+      const candidates = [...new Set([secretFromUrl, storedSecret])].filter((secret): secret is string => secret !== null);
+
+      for (const secret of candidates) {
+        const url = await this.#probeTracksUrl(secret);
+        if (url) {
+          localStorage.setItem('routesSecret', secret);
+          return url;
+        }
+      }
+
+      // no candidate resolves to an existing file (e.g. the secret was rotated) — forget it
+      localStorage.removeItem('routesSecret');
+      return undefined;
+    },
+  });
+  readonly tracksUrl = computed(() => this.#tracksUrlResource.value());
+
+  async #probeTracksUrl(secret: string): Promise<string | undefined> {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret));
+    const hash = Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
+    const url = new URL(`assets/${this.#tracksFilePrefix}-${hash}.pmtiles`, document.baseURI).href;
+    // fetch the first bytes and verify the pmtiles magic — a plain status check is not
+    // enough because dev servers answer unknown paths with the index.html (SPA fallback)
+    const response = await fetch(url, { headers: { Range: 'bytes=0-6' } });
+    if (!response.ok) return undefined;
+    const magic = new TextDecoder().decode((await response.bytes()).slice(0, 7));
+    return magic === 'PMTiles' ? url : undefined;
+  }
+  readonly tracksPaint = { 'line-color': '#FFD500', 'line-width': 2.5, 'line-opacity': 0.85 };
 
   // linked signals
   readonly mapStyleSelection = linkedSignal<KeyboardEvent | undefined, 'light' | 'streets' | 'satellite'>({
@@ -100,8 +146,8 @@ export class AppComponent {
   });
 
   // resources
-  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-e3044e48-9814-427a-8d70-cc212387fc92.geojson');
-  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-f1f72664-a179-456a-83da-301ae3ec56b4.geojson');
+  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-e7a09ba9-3a24-498b-9e37-6048f9ff4702.geojson');
+  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-75f8c884-dd62-450e-b5e0-6b718831d838.geojson');
   readonly geoPermissionStatus = resource({ loader: () => navigator.permissions.query({ name: 'geolocation' }) });
   readonly position = resource({
     params: () => ({ showPosition: this.showPosition() }),

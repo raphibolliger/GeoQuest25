@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Text;
 using System.Text.RegularExpressions;
 using GeoQuest25.Processing;
 using Microsoft.Extensions.Configuration;
@@ -171,10 +172,12 @@ if (capriscaLugano)
         visited.Add(toMove);
 }
 
-// delete old geojson files; the assets are not checked in, so after a fresh checkout (CI) the folder is empty
+// delete old generated assets; they are not checked in, so after a fresh checkout (CI) the folder is empty
 var assetsPath = Path.Combine(frontendPaht, "src/assets");
 foreach (var geojsonAssetFile in Directory.GetFiles(assetsPath, "*.geojson"))
     File.Delete(geojsonAssetFile);
+foreach (var pmtilesAssetFile in Directory.GetFiles(assetsPath, "*.pmtiles"))
+    File.Delete(pmtilesAssetFile);
 
 var newVisitedFileName = $"visited-{Guid.NewGuid()}.geojson";
 await GenerateGeoJson(visited.ToArray(), $"{assetsPath}/{newVisitedFileName}");
@@ -182,12 +185,25 @@ await GenerateGeoJson(visited.ToArray(), $"{assetsPath}/{newVisitedFileName}");
 var newTodoFileName = $"todo-{Guid.NewGuid()}.geojson";
 await GenerateGeoJson(todo.ToArray(), $"{assetsPath}/{newTodoFileName}");
 
-// replace geojson references in app.component.ts, whatever guid they currently point to
+// all done-activity tracks as vector tiles (pmtiles), rendered as lines by the frontend.
+// the filename ends with the sha256 hash of the routes secret: the frontend only knows the
+// "tracks-<guid>" prefix and appends the hash it derives from the ?routes=<secret> query
+// param — without the secret the file url cannot be constructed
+var routesSecret = RequiredConfig("Gpx:RoutesSecret");
+var routesSecretHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(routesSecret))).ToLowerInvariant();
+var newTracksFilePrefix = $"tracks-{Guid.NewGuid()}";
+var newTracksFileName = $"{newTracksFilePrefix}-{routesSecretHash}.pmtiles";
+TrackExporter.ExportPmTiles(doneGpxFiles, Path.Combine(assetsPath, newTracksFileName));
+Console.WriteLine($"PMTiles wurde nach {Path.Combine(assetsPath, newTracksFileName)} geschrieben. ({stopwatch.Elapsed.TotalSeconds:F1}s)");
+
+// replace asset references in app.component.ts, whatever guid they currently point to;
+// for the tracks only the guid prefix is written, the frontend appends the secret hash itself
 var appComponentPath = Path.Combine(frontendPaht, "src/app/app.component.ts");
 
 var appComponentContent = await File.ReadAllTextAsync(appComponentPath);
 var newAppComponentContent = Regex.Replace(appComponentContent, @"visited-[0-9a-fA-F\-]+\.geojson", newVisitedFileName);
 newAppComponentContent = Regex.Replace(newAppComponentContent, @"todo-[0-9a-fA-F\-]+\.geojson", newTodoFileName);
+newAppComponentContent = Regex.Replace(newAppComponentContent, @"tracks-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", newTracksFilePrefix);
 
 await File.WriteAllTextAsync(appComponentPath, newAppComponentContent);
 

@@ -27,12 +27,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # tippecanoe (used by TrackExporter to build the tracks pmtiles) is not packaged
+      # for ubuntu, so build it from source once and cache the binaries
+      - name: Cache tippecanoe
+        id: cache-tippecanoe
+        uses: actions/cache@v4
+        with:
+          path: ~/tippecanoe-bin
+          key: tippecanoe-${{ runner.os }}-v1
+
+      - name: Build tippecanoe
+        if: steps.cache-tippecanoe.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 https://github.com/felt/tippecanoe.git /tmp/tippecanoe
+          make -C /tmp/tippecanoe -j"$(nproc)"
+          mkdir -p ~/tippecanoe-bin
+          cp /tmp/tippecanoe/tippecanoe ~/tippecanoe-bin/
+
+      - name: Add tippecanoe to PATH
+        run: echo "$HOME/tippecanoe-bin" >> "$GITHUB_PATH"
+
       - name: Run processing pipeline
         working-directory: GeoQuest25.Processing
         env:
           Dropbox__AppKey: ${{ secrets.DROPBOX_APP_KEY }}
           Dropbox__AppSecret: ${{ secrets.DROPBOX_APP_SECRET }}
           Dropbox__RefreshToken: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+          Gpx__RoutesSecret: ${{ secrets.GPX_ROUTES_SECRET }}
         run: dotnet run --project GeoQuest25.Processing --configuration Release
 
       - name: Build Angular App

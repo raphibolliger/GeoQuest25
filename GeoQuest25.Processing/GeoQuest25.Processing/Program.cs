@@ -1,29 +1,77 @@
 using System.Diagnostics;
+using System.Reflection;
+using System.Text.RegularExpressions;
 using GeoQuest25.Processing;
+using Microsoft.Extensions.Configuration;
 using NetTopologySuite.Features;
 using NetTopologySuite.Geometries;
 using NetTopologySuite.Geometries.Prepared;
 using NetTopologySuite.Index.Strtree;
 using NetTopologySuite.IO;
 
+// locally the dropbox credentials come from user secrets (dotnet user-secrets set "Dropbox:AppKey" "..."),
+// in the GitHub Action they come from environment variables (Dropbox__AppKey etc.)
+var configuration = new ConfigurationBuilder()
+    .AddUserSecrets(Assembly.GetExecutingAssembly(), optional: true)
+    .AddEnvironmentVariables()
+    .Build();
+
+string RequiredConfig(string key) =>
+    configuration[key] ?? throw new ApplicationException(
+        $"Missing configuration value \"{key}\". Set it locally via `dotnet user-secrets set \"{key}\" \"...\"` or as environment variable `{key.Replace(":", "__")}`.");
+
+// the dropbox folders are synced to disk on the dev machine — use them directly there;
+// only the CI runner (no synced folder) downloads via the dropbox api, so the
+// credentials are only required when a download actually happens
+const string localDropboxRoot = "/Users/raphi/Library/CloudStorage/Dropbox-YARXGmbH/Raphael Bolliger";
+DropboxDownloader? dropboxDownloader = null;
+
+async Task<GpxFolder> ResolveGpxFolderAsync(string dropboxPath)
+{
+    var localPath = Path.Combine(localDropboxRoot, dropboxPath.TrimStart('/'));
+    if (Directory.Exists(localPath))
+    {
+        Console.WriteLine($"Using locally synced dropbox folder \"{localPath}\"");
+        return new GpxFolder(localPath, IsTemporary: false);
+    }
+
+    dropboxDownloader ??= new DropboxDownloader(
+        RequiredConfig("Dropbox:AppKey"),
+        RequiredConfig("Dropbox:AppSecret"),
+        RequiredConfig("Dropbox:RefreshToken"));
+    return new GpxFolder(await dropboxDownloader.DownloadFolderAsync(dropboxPath, ".gpx"), IsTemporary: true);
+}
+
+// locate the repo layout early: the frontend path is needed for the generated assets at the
+// end, its parent (the repo root) anchors the checked-in shape file
+var frontendPaht = SearchFrontendPath();
+if (frontendPaht is null)
+    throw new ApplicationException("Frontend assets path is null. Updating geojson files not possible.");
+var repositoryRoot = Directory.GetParent(frontendPaht)!.FullName;
+
 var stopwatch = Stopwatch.StartNew();
 var shapeFileReader = new ShapeFileReader();
 
 // read shape file and extract all swiss municipalities
-var shapeFilePath = "/Users/raphi/Downloads/swissboundaries_gemeinden_3d_2025-01_2056_5728.shp/swissBOUNDARIES3D_1_5_TLM_HOHEITSGEBIET.shp";
+var shapeFilePath = Path.Combine(repositoryRoot, "GeoQuest25.Processing/shapefiles/swissBOUNDARIES3D_1_5_TLM_HOHEITSGEBIET.shp");
 var municipalities = shapeFileReader.ReadShapeFile(shapeFilePath);
 Console.WriteLine($"Number of municipalities: {municipalities.Length} ({stopwatch.Elapsed.TotalSeconds:F1}s)");
 
 // read done activities gpx files, sorted oldest first so the first match per municipality is the earliest visit
-const string doneActivitiesFolderPath = "/Users/raphi/Library/CloudStorage/Dropbox-YARXGmbH/Raphael Bolliger/Apps/HealthFitExporter";
-var doneActivitiesFilePaths = GpxFilesReader.GetGpxFilePaths(doneActivitiesFolderPath, true);
+var doneActivitiesFolder = await ResolveGpxFolderAsync("/Apps/HealthFitExporter");
+var doneActivitiesFilePaths = GpxFilesReader.GetGpxFilePaths(doneActivitiesFolder.Path, true);
 var doneGpxFiles = GpxFilesReader.ReadGpxFiles(doneActivitiesFilePaths).OrderBy(f => f.Date).ToArray();
+if (doneActivitiesFolder.IsTemporary)
+    Directory.Delete(doneActivitiesFolder.Path, true);
 Console.WriteLine($"Number of gpx files from already done activities: {doneGpxFiles.Length} ({stopwatch.Elapsed.TotalSeconds:F1}s)");
 
 // read planned activities gpx files
-const string plannedActivitiesFolderPath = "/Users/raphi/Library/Mobile Documents/com~apple~CloudDocs/01 Dokumente/03 Gpx Tours";
-var plannedActivitiesFilePaths = GpxFilesReader.GetGpxFilePaths(plannedActivitiesFolderPath, false);
+var plannedActivitiesFolder = await ResolveGpxFolderAsync("/01 Privat/10 Projekte/06_GeoQuest/03 GpxTours");
+var plannedActivitiesFilePaths = GpxFilesReader.GetGpxFilePaths(plannedActivitiesFolder.Path, false);
 var plannedGpxFiles = GpxFilesReader.ReadGpxFiles(plannedActivitiesFilePaths);
+if (plannedActivitiesFolder.IsTemporary)
+    Directory.Delete(plannedActivitiesFolder.Path, true);
+dropboxDownloader?.Dispose();
 Console.WriteLine($"Number of gpx files from planned activities: {plannedGpxFiles.Length} ({stopwatch.Elapsed.TotalSeconds:F1}s)");
 
 // prepare the municipality geometries: a prepared geometry answers point-in-polygon
@@ -123,21 +171,10 @@ if (capriscaLugano)
         visited.Add(toMove);
 }
 
-// delete old geojson files and remove old ones
-var frontendPaht = SearchFrontendPath();
-if (frontendPaht is null)
-    throw new ApplicationException("Frontend assets path is null. Updating geojson files not possible.");
-
+// delete old geojson files; the assets are not checked in, so after a fresh checkout (CI) the folder is empty
 var assetsPath = Path.Combine(frontendPaht, "src/assets");
-var geojsonAssetFiles = Directory.GetFiles(assetsPath, "*.geojson");
-
-var existingVisitedFilePath = geojsonAssetFiles.Single(f => f.Contains("visited-"));
-var existingVisitedFile = new FileInfo(existingVisitedFilePath);
-File.Delete(existingVisitedFilePath);
-
-var existingTodoFilePath = geojsonAssetFiles.Single(f => f.Contains("todo-"));
-var existingTodoFile = new FileInfo(existingTodoFilePath);
-File.Delete(existingTodoFilePath);
+foreach (var geojsonAssetFile in Directory.GetFiles(assetsPath, "*.geojson"))
+    File.Delete(geojsonAssetFile);
 
 var newVisitedFileName = $"visited-{Guid.NewGuid()}.geojson";
 await GenerateGeoJson(visited.ToArray(), $"{assetsPath}/{newVisitedFileName}");
@@ -145,11 +182,12 @@ await GenerateGeoJson(visited.ToArray(), $"{assetsPath}/{newVisitedFileName}");
 var newTodoFileName = $"todo-{Guid.NewGuid()}.geojson";
 await GenerateGeoJson(todo.ToArray(), $"{assetsPath}/{newTodoFileName}");
 
-// replace geosjon reference in app.component.ts
+// replace geojson references in app.component.ts, whatever guid they currently point to
 var appComponentPath = Path.Combine(frontendPaht, "src/app/app.component.ts");
 
 var appComponentContent = await File.ReadAllTextAsync(appComponentPath);
-var newAppComponentContent = appComponentContent.Replace(existingVisitedFile.Name, newVisitedFileName).Replace(existingTodoFile.Name, newTodoFileName);
+var newAppComponentContent = Regex.Replace(appComponentContent, @"visited-[0-9a-fA-F\-]+\.geojson", newVisitedFileName);
+newAppComponentContent = Regex.Replace(newAppComponentContent, @"todo-[0-9a-fA-F\-]+\.geojson", newTodoFileName);
 
 await File.WriteAllTextAsync(appComponentPath, newAppComponentContent);
 
@@ -215,3 +253,7 @@ string? SearchFrontendPath()
 }
 
 internal sealed record MunicipalityEntry(Municipality Municipality, Envelope Envelope, IPreparedGeometry Prepared);
+
+// a gpx source folder: either the locally synced dropbox folder (kept) or a
+// temp directory downloaded via the dropbox api (deleted after reading)
+internal sealed record GpxFolder(string Path, bool IsTemporary);

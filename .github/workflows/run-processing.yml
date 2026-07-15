@@ -1,0 +1,54 @@
+# Runs the Processing pipeline (GPX download from Dropbox + municipality matching),
+# builds the frontend with the freshly generated assets and deploys everything to
+# GitHub Pages. The generated assets are never committed to the repo.
+name: Process and Deploy
+
+on:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Run processing pipeline
+        working-directory: GeoQuest25.Processing
+        env:
+          Dropbox__AppKey: ${{ secrets.DROPBOX_APP_KEY }}
+          Dropbox__AppSecret: ${{ secrets.DROPBOX_APP_SECRET }}
+          Dropbox__RefreshToken: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+        run: dotnet run --project GeoQuest25.Processing --configuration Release
+
+      - name: Build Angular App
+        run: |
+          cd GeoQuest25.Frontend
+          npm install
+          npm run build -- --base-href=/GeoQuest25/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: './GeoQuest25.Frontend/dist/geo-quest25/browser'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

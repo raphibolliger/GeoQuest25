@@ -62,7 +62,7 @@ The two Dropbox folder paths (done activities: `/Apps/HealthFitExporter`, planne
 
 Set locally via `dotnet user-secrets set "Dropbox:AppKey" "..."` (run from `GeoQuest25.Processing/GeoQuest25.Processing/`).
 
-The `ShapeFileReader.TransformCoordinate` method applies a small empirically-derived offset (`0.0009755347103` lon, `0.001892481137` lat) after the projection transform to correct for a residual misalignment — don't "clean this up" without understanding why it's there.
+`ShapeFileReader.TransformCoordinate` converts LV95 → WGS84 using the official swisstopo approximation formulas ("Näherungslösung", polynomial, ~1 m accuracy across Switzerland, ~2.3 m at the very western edge near Geneva) — no ProjNET, no datum-shift parameters needed. If higher accuracy is ever required, the reference is the swisstopo REFRAME service (`geodesy.geo.admin.ch/reframe/lv95towgs84`).
 
 ## Cross-cutting notes
 

@@ -2,15 +2,11 @@ using System.Text;
 using NetTopologySuite.Features;
 using NetTopologySuite.Geometries;
 using NetTopologySuite.IO;
-using ProjNet.CoordinateSystems;
-using ProjNet.CoordinateSystems.Transformations;
 
 namespace GeoQuest25.Processing
 {
     public class ShapeFileReader
     {
-        private readonly ICoordinateTransformation _transformer = CreateCoordinateTransformer();
-        
         public Municipality[] ReadShapeFile(string shapeFilePath)
         {
             var shapefileReader = new ShapefileDataReader(shapeFilePath, new GeometryFactory(), Encoding.GetEncoding("UTF-8"));
@@ -76,47 +72,30 @@ namespace GeoQuest25.Processing
             throw new Exception($"Unsupported geometry type {geometry.GetType()}.");
         }
         
-        private Coordinate TransformCoordinate(Coordinate coordinate)
+        // official swisstopo approximation formulas for LV95 -> WGS84 ("Näherungslösung",
+        // see "Formeln und Konstanten für die Berechnung der Schweizerischen schiefachsigen
+        // Zylinderprojektion und der Transformation zwischen Koordinatensystemen"), accurate
+        // to ~1m across Switzerland (~2.3m at the very western edge near Geneva) — validated
+        // against the official geodesy.geo.admin.ch/reframe service
+        private static Coordinate TransformCoordinate(Coordinate coordinate)
         {
-            // original first coordinate 7.801844386861247      46.68652370661302
-            // moved first coordinate    7.80086885215094       46.68463122547609
-            // factor                    0.0009755347103        0.001892481137
-    
-            var transformed = _transformer.MathTransform.Transform([coordinate.X, coordinate.Y]);
-            double correctedLon = transformed[0] - 0.0009755347103;
-            double correctedLat = transformed[1] - 0.001892481137;
-            return new Coordinate(correctedLon, correctedLat);
-        }
-        
-        private static ICoordinateTransformation CreateCoordinateTransformer()
-        {
-            var ctf = new CoordinateTransformationFactory();
-            var csFactory = new CoordinateSystemFactory();
+            var y = (coordinate.X - 2_600_000d) / 1_000_000d;
+            var x = (coordinate.Y - 1_200_000d) / 1_000_000d;
 
-            // CH1903+ / LV95 (EPSG:2056) Definition aus der .prj-Datei
-            string ch1903Lv95Wkt = @"
-            PROJCS[""CH1903+_LV95"",
-                GEOGCS[""GCS_CH1903+"",
-                    DATUM[""D_CH1903+"",
-                        SPHEROID[""Bessel_1841"",6377397.155,299.1528128]],
-                    PRIMEM[""Greenwich"",0.0],
-                    UNIT[""Degree"",0.0174532925199433]],
-                PROJECTION[""Hotine_Oblique_Mercator_Azimuth_Center""],
-                PARAMETER[""False_Easting"",2600000.0],
-                PARAMETER[""False_Northing"",1200000.0],
-                PARAMETER[""Scale_Factor"",1.0],
-                PARAMETER[""Azimuth"",90.0],
-                PARAMETER[""Longitude_Of_Center"",7.439583333333333],
-                PARAMETER[""Latitude_Of_Center"",46.95240555555556],
-                PARAMETER[""rectified_grid_angle"",90.0],
-                UNIT[""Meter"",1.0]]";
-    
-            var ch1903Lv95 = csFactory.CreateFromWkt(ch1903Lv95Wkt);
+            var lambda = 2.6779094
+                         + 4.728982 * y
+                         + 0.791484 * y * x
+                         + 0.1306 * y * x * x
+                         - 0.0436 * y * y * y;
+            var phi = 16.9023892
+                      + 3.238272 * x
+                      - 0.270978 * y * y
+                      - 0.002528 * x * x
+                      - 0.0447 * y * y * x
+                      - 0.0140 * x * x * x;
 
-            // Zielsystem: WGS84 (EPSG:4326)
-            var wgs84 = GeographicCoordinateSystem.WGS84;
-
-            return ctf.CreateFromCoordinateSystems(ch1903Lv95, wgs84);
+            // the formulas yield values in the unit 10000" — factor 100/36 converts to degrees
+            return new Coordinate(lambda * 100 / 36, phi * 100 / 36);
         }
     }
 

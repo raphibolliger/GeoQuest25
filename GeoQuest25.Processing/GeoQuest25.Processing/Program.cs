@@ -20,11 +20,27 @@ string RequiredConfig(string key) =>
     configuration[key] ?? throw new ApplicationException(
         $"Missing configuration value \"{key}\". Set it locally via `dotnet user-secrets set \"{key}\" \"...\"` or as environment variable `{key.Replace(":", "__")}`.");
 
-// fail fast on missing credentials before any expensive work happens
-using var dropboxDownloader = new DropboxDownloader(
-    RequiredConfig("Dropbox:AppKey"),
-    RequiredConfig("Dropbox:AppSecret"),
-    RequiredConfig("Dropbox:RefreshToken"));
+// the dropbox folders are synced to disk on the dev machine — use them directly there;
+// only the CI runner (no synced folder) downloads via the dropbox api, so the
+// credentials are only required when a download actually happens
+const string localDropboxRoot = "/Users/raphi/Library/CloudStorage/Dropbox-YARXGmbH/Raphael Bolliger";
+DropboxDownloader? dropboxDownloader = null;
+
+async Task<GpxFolder> ResolveGpxFolderAsync(string dropboxPath)
+{
+    var localPath = Path.Combine(localDropboxRoot, dropboxPath.TrimStart('/'));
+    if (Directory.Exists(localPath))
+    {
+        Console.WriteLine($"Using locally synced dropbox folder \"{localPath}\"");
+        return new GpxFolder(localPath, IsTemporary: false);
+    }
+
+    dropboxDownloader ??= new DropboxDownloader(
+        RequiredConfig("Dropbox:AppKey"),
+        RequiredConfig("Dropbox:AppSecret"),
+        RequiredConfig("Dropbox:RefreshToken"));
+    return new GpxFolder(await dropboxDownloader.DownloadFolderAsync(dropboxPath, ".gpx"), IsTemporary: true);
+}
 
 // locate the repo layout early: the frontend path is needed for the generated assets at the
 // end, its parent (the repo root) anchors the checked-in shape file
@@ -42,17 +58,20 @@ var municipalities = shapeFileReader.ReadShapeFile(shapeFilePath);
 Console.WriteLine($"Number of municipalities: {municipalities.Length} ({stopwatch.Elapsed.TotalSeconds:F1}s)");
 
 // read done activities gpx files, sorted oldest first so the first match per municipality is the earliest visit
-var doneActivitiesFolderPath = await dropboxDownloader.DownloadFolderAsync("/Apps/HealthFitExporter", ".gpx");
-var doneActivitiesFilePaths = GpxFilesReader.GetGpxFilePaths(doneActivitiesFolderPath, true);
+var doneActivitiesFolder = await ResolveGpxFolderAsync("/Apps/HealthFitExporter");
+var doneActivitiesFilePaths = GpxFilesReader.GetGpxFilePaths(doneActivitiesFolder.Path, true);
 var doneGpxFiles = GpxFilesReader.ReadGpxFiles(doneActivitiesFilePaths).OrderBy(f => f.Date).ToArray();
-Directory.Delete(doneActivitiesFolderPath, true);
+if (doneActivitiesFolder.IsTemporary)
+    Directory.Delete(doneActivitiesFolder.Path, true);
 Console.WriteLine($"Number of gpx files from already done activities: {doneGpxFiles.Length} ({stopwatch.Elapsed.TotalSeconds:F1}s)");
 
 // read planned activities gpx files
-var plannedActivitiesFolderPath = await dropboxDownloader.DownloadFolderAsync("/01 Privat/10 Projekte/06_GeoQuest/03 GpxTours", ".gpx");
-var plannedActivitiesFilePaths = GpxFilesReader.GetGpxFilePaths(plannedActivitiesFolderPath, false);
+var plannedActivitiesFolder = await ResolveGpxFolderAsync("/01 Privat/10 Projekte/06_GeoQuest/03 GpxTours");
+var plannedActivitiesFilePaths = GpxFilesReader.GetGpxFilePaths(plannedActivitiesFolder.Path, false);
 var plannedGpxFiles = GpxFilesReader.ReadGpxFiles(plannedActivitiesFilePaths);
-Directory.Delete(plannedActivitiesFolderPath, true);
+if (plannedActivitiesFolder.IsTemporary)
+    Directory.Delete(plannedActivitiesFolder.Path, true);
+dropboxDownloader?.Dispose();
 Console.WriteLine($"Number of gpx files from planned activities: {plannedGpxFiles.Length} ({stopwatch.Elapsed.TotalSeconds:F1}s)");
 
 // prepare the municipality geometries: a prepared geometry answers point-in-polygon
@@ -234,3 +253,7 @@ string? SearchFrontendPath()
 }
 
 internal sealed record MunicipalityEntry(Municipality Municipality, Envelope Envelope, IPreparedGeometry Prepared);
+
+// a gpx source folder: either the locally synced dropbox folder (kept) or a
+// temp directory downloaded via the dropbox api (deleted after reading)
+internal sealed record GpxFolder(string Path, bool IsTemporary);

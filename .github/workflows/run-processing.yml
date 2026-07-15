@@ -5,7 +5,7 @@ name: Process and Deploy
 
 on:
   push:
-    branches: ['main', 'feature/direct-dropbox-download']
+    branches: ['main']
   workflow_dispatch:
 
 permissions:

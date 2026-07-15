@@ -54,7 +54,7 @@ The shape file (public swisstopo data that rarely changes) is checked into the r
 
 ### Dropbox configuration
 
-The GPX folders are downloaded from Dropbox. Authentication uses the Dropbox OAuth refresh-token flow (works unattended in CI, since Dropbox access tokens are short-lived). Configuration comes from **user secrets** locally (`UserSecretsId` is `geoquest25-processing`) and from **environment variables** (`Dropbox__AppKey` etc.) in GitHub Actions:
+The GPX folders come from Dropbox. On the author's machine the locally synced Dropbox folders (under `/Users/raphi/Library/CloudStorage/Dropbox-YARXGmbH/...`) are read directly — no download, no credentials needed; only when a folder is not on disk (i.e. in CI) is it downloaded via the Dropbox API. Authentication uses the Dropbox OAuth refresh-token flow (works unattended in CI, since Dropbox access tokens are short-lived). Configuration comes from **user secrets** locally (`UserSecretsId` is `geoquest25-processing`) and from **environment variables** (`Dropbox__AppKey` etc.) in GitHub Actions:
 
 - `Dropbox:AppKey`, `Dropbox:AppSecret`, `Dropbox:RefreshToken` — required, from the Dropbox app in the developer portal.
 

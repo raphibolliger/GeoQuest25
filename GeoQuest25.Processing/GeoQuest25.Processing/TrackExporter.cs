@@ -14,12 +14,22 @@ namespace GeoQuest25.Processing
         // further per zoom level anyway
         private const double SimplifyToleranceDegrees = 0.00005;
 
+        // gps sampling keeps consecutive points within ~20m of each other (p99.9 over all
+        // activities), so a gap this large means the recording was paused in between — e.g.
+        // a train ride between two stations. connecting those points would draw a straight
+        // line along a route that was never travelled, so the track is split there instead.
+        private const double MaxPointGapMeters = 200;
+
+        /// <summary>
+        /// Vector tiles, for the many recorded activities: only the tiles in view get loaded.
+        /// Requires tippecanoe on PATH.
+        /// </summary>
         public static void ExportPmTiles(GpxFile[] gpxFiles, string outputFilePath)
         {
             var inputFilePath = Path.Combine(Path.GetTempPath(), $"geoquest-tracks-{Guid.NewGuid()}.geojsonl");
             try
             {
-                WriteLineDelimitedGeoJson(gpxFiles, inputFilePath);
+                File.WriteAllLines(inputFilePath, BuildFeatureLines(gpxFiles, MaxPointGapMeters));
                 RunTippecanoe(inputFilePath, outputFilePath);
             }
             finally
@@ -28,48 +38,107 @@ namespace GeoQuest25.Processing
             }
         }
 
-        private static void WriteLineDelimitedGeoJson(GpxFile[] gpxFiles, string inputFilePath)
+        /// <summary>
+        /// Plain GeoJSON, for the handful of planned routes — too few to be worth tiling.
+        /// Planned routes are never split: they come from a route planner, so they are
+        /// continuous by construction and sampled far more sparsely than a recording
+        /// (median ~27m, up to ~650m on straight stretches) — the gap splitting used for
+        /// recorded tracks would shred them into fragments.
+        /// </summary>
+        public static void ExportGeoJson(GpxFile[] gpxFiles, string outputFilePath)
+        {
+            var features = string.Join(',', BuildFeatureLines(gpxFiles, double.PositiveInfinity));
+            File.WriteAllText(outputFilePath, $"{{\"type\":\"FeatureCollection\",\"features\":[{features}]}}");
+        }
+
+        private static string[] BuildFeatureLines(GpxFile[] gpxFiles, double maxPointGapMeters)
         {
             var lines = new string?[gpxFiles.Length];
             Parallel.For(0, gpxFiles.Length, i =>
             {
-                var gpxFile = gpxFiles[i];
-                if (gpxFile.Points.Length < 2) return;
+                var segments = SplitAtGaps(gpxFiles[i].Points, maxPointGapMeters)
+                    .Select(Simplify)
+                    .Where(segment => segment.Length >= 2)
+                    .ToArray();
+                if (segments.Length == 0) return;
 
-                var lineString = GeometryFactory.CreateLineString(gpxFile.Points.Select(p => p.Coordinate).ToArray());
-                var simplified = DouglasPeuckerSimplifier.Simplify(lineString, SimplifyToleranceDegrees);
-                if (simplified.Coordinates.Length < 2) return;
-
-                lines[i] = BuildFeatureLine(simplified.Coordinates, gpxFile.Date);
+                lines[i] = BuildFeatureLine(segments, gpxFiles[i].Date);
             });
 
-            using var writer = new StreamWriter(inputFilePath, false, Encoding.UTF8);
-            foreach (var line in lines)
-            {
-                if (line is not null)
-                    writer.WriteLine(line);
-            }
+            return lines.OfType<string>().ToArray();
         }
 
-        private static string BuildFeatureLine(Coordinate[] coordinates, DateOnly date)
+        // the continuously recorded stretches of one activity, split wherever the recording
+        // was paused; segments of a single point carry no line and are dropped
+        private static IEnumerable<Coordinate[]> SplitAtGaps(Point[] points, double maxPointGapMeters)
         {
-            var builder = new StringBuilder(coordinates.Length * 20);
-            builder.Append($"{{\"type\":\"Feature\",\"properties\":{{\"date\":\"{date:yyyy-MM-dd}\"}},\"geometry\":{{\"type\":\"LineString\",\"coordinates\":[");
+            var segmentStart = 0;
+            for (var i = 1; i < points.Length; i++)
+            {
+                if (DistanceInMeters(points[i - 1].Coordinate, points[i].Coordinate) <= maxPointGapMeters) continue;
+
+                if (i - segmentStart >= 2)
+                    yield return points[segmentStart..i].Select(p => p.Coordinate).ToArray();
+                segmentStart = i;
+            }
+
+            if (points.Length - segmentStart >= 2)
+                yield return points[segmentStart..].Select(p => p.Coordinate).ToArray();
+        }
+
+        private static Coordinate[] Simplify(Coordinate[] segment)
+        {
+            var simplified = DouglasPeuckerSimplifier.Simplify(GeometryFactory.CreateLineString(segment), SimplifyToleranceDegrees);
 
             // 5 decimal places (~1m) is plenty for display and keeps the intermediate file small
-            double previousLon = double.NaN, previousLat = double.NaN;
-            var first = true;
-            foreach (var coordinate in coordinates)
+            var rounded = new List<Coordinate>(simplified.Coordinates.Length);
+            foreach (var coordinate in simplified.Coordinates)
             {
-                var lon = Math.Round(coordinate.X, 5);
-                var lat = Math.Round(coordinate.Y, 5);
-                if (lon == previousLon && lat == previousLat) continue;
-                previousLon = lon;
-                previousLat = lat;
+                var candidate = new Coordinate(Math.Round(coordinate.X, 5), Math.Round(coordinate.Y, 5));
+                if (rounded.Count == 0 || !candidate.Equals2D(rounded[^1]))
+                    rounded.Add(candidate);
+            }
 
-                if (!first) builder.Append(',');
-                first = false;
-                builder.Append('[').Append(lon.ToString(CultureInfo.InvariantCulture)).Append(',').Append(lat.ToString(CultureInfo.InvariantCulture)).Append(']');
+            return rounded.ToArray();
+        }
+
+        private static double DistanceInMeters(Coordinate a, Coordinate b)
+        {
+            const double earthRadiusMeters = 6_371_000;
+            const double degreesToRadians = Math.PI / 180;
+
+            var latitudeA = a.Y * degreesToRadians;
+            var latitudeB = b.Y * degreesToRadians;
+            var deltaLatitude = (b.Y - a.Y) * degreesToRadians;
+            var deltaLongitude = (b.X - a.X) * degreesToRadians;
+
+            var haversine = Math.Sin(deltaLatitude / 2) * Math.Sin(deltaLatitude / 2)
+                            + Math.Cos(latitudeA) * Math.Cos(latitudeB) * Math.Sin(deltaLongitude / 2) * Math.Sin(deltaLongitude / 2);
+            return 2 * earthRadiusMeters * Math.Asin(Math.Sqrt(haversine));
+        }
+
+        private static string BuildFeatureLine(Coordinate[][] segments, DateOnly date)
+        {
+            var builder = new StringBuilder(segments.Sum(segment => segment.Length) * 20);
+            builder.Append($"{{\"type\":\"Feature\",\"properties\":{{\"date\":\"{date:yyyy-MM-dd}\"}},\"geometry\":{{\"type\":\"MultiLineString\",\"coordinates\":[");
+
+            for (var s = 0; s < segments.Length; s++)
+            {
+                if (s > 0) builder.Append(',');
+                builder.Append('[');
+
+                var segment = segments[s];
+                for (var c = 0; c < segment.Length; c++)
+                {
+                    if (c > 0) builder.Append(',');
+                    builder.Append('[')
+                        .Append(segment[c].X.ToString(CultureInfo.InvariantCulture))
+                        .Append(',')
+                        .Append(segment[c].Y.ToString(CultureInfo.InvariantCulture))
+                        .Append(']');
+                }
+
+                builder.Append(']');
             }
 
             builder.Append("]}}");

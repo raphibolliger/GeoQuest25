@@ -44,4 +44,5 @@ Thumbs.db
 # Generated geo assets (produced by GeoQuest25.Processing, deployed via Actions, never committed)
 /src/assets/visited-*.geojson
 /src/assets/todo-*.geojson
+/src/assets/planned-*.geojson
 /src/assets/tracks-*.pmtiles

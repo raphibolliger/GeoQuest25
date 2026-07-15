@@ -24,13 +24,13 @@ Stack & conventions:
 - **Angular 21 with zoneless change detection** (`provideZonelessChangeDetection()` in `app.config.ts`). Reactivity is built on signals — `signal`, `computed`, `linkedSignal`, `effect`, `resource`, `httpResource`, `toSignal`. Don't introduce `NgZone`-dependent patterns or `async` pipes for state; follow the existing signal-based pattern.
 - **Strict TypeScript** plus `strictTemplates`, `strictInputAccessModifiers`, `noPropertyAccessFromIndexSignature`, etc. — assume strict everything.
 - **Standalone components only.** There is no NgModule. The current app is essentially one component (`app.component.ts`) that wires Mapbox layers.
-- **Mapbox via `ngx-mapbox-gl`.** Token is provided in `app.config.ts` via `provideMapboxGL`. The map renders two GeoJSON sources (`visited`, `todo`) loaded over HTTP from `src/assets/` and styled by reactive `FillPaint` expressions, plus a `tracks` vector source (PMTiles, toggled off by default) that draws all done-activity GPX paths as lines. Mapbox GL JS (v3.21+) detects the `.pmtiles` extension natively and loads the file via HTTP range requests — no extra library needed.
+- **Mapbox via `ngx-mapbox-gl`.** Token is provided in `app.config.ts` via `provideMapboxGL`. The map renders two GeoJSON sources (`visited`, `todo`) loaded over HTTP from `src/assets/` and styled by reactive `FillPaint` expressions, plus a `tracks` vector source (PMTiles, toggled off by default) that draws all done-activity GPX paths as lines. Mapbox GL JS (v3.21+) detects the `.pmtiles` extension natively and loads the file via HTTP range requests — no extra library needed. The planned routes are a third GeoJSON source drawn in blue; they hang off the existing "planned" toggle and are deliberately **not** secret-gated (only a handful, and they are not places the author actually goes).
 - **`mapboxgl.workerUrl` is deliberately overridden in `app.config.ts`** to load the map worker from `assets/mapbox-gl-csp-worker.js` (copied from `node_modules` via the `assets` config in `angular.json`). Without this, the Vite dev server mangles the inlined worker blob and the PMTiles tile-provider plugin fails to load inside the worker (`__vite__injectQuery is not defined`) — tracks then silently don't render under `npm start`. Don't remove it.
 - **Styling:** Tailwind v4 (via `@tailwindcss/postcss`), SCSS for component styles. Prettier with an Angular HTML parser override.
 
 ### GeoJSON assets are generated, gitignored and cache-busted with GUIDs
 
-A pipeline run writes one `visited-<guid>.geojson`, one `todo-<guid>.geojson` and one `tracks-<guid>-<hash>.pmtiles` into `src/assets/` (deleting any previous ones) and rewrites the asset URLs in `app.component.ts` to match.
+A pipeline run writes one `visited-<guid>.geojson`, one `todo-<guid>.geojson`, one `planned-<guid>.geojson` (the planned routes as lines) and one `tracks-<guid>-<hash>.pmtiles` into `src/assets/` (deleting any previous ones) and rewrites the asset URLs in `app.component.ts` to match.
 
 ### The tracks are gated by a secret (capability URL)
 
@@ -51,7 +51,9 @@ What it does (`GeoQuest25.Processing/Program.cs`):
 2. Downloads two folders of `.gpx` files from Dropbox — "done" activities (filtered by activity-type keywords in the filename, e.g. "Outdoor Cycling") and "planned" activities (unfiltered). All Dropbox downloads go through `DropboxDownloader.cs` (folder-zip download via `files/download_zip`, extracted flattened into temp directories).
 3. For each municipality, checks in parallel whether any GPX track point falls inside its polygon. Splits into `visited` / `todo`; visited ones get a `firstVisit` date, todo ones get `planned=true` if any planned route touches them.
 4. Hand-coded special cases merge two "Comunanza" shared-territory polygons into visited when either co-owning municipality has been visited.
-5. Exports all done-activity tracks as vector tiles (`TrackExporter.cs`): pre-simplifies each track with Douglas-Peucker (~5 m tolerance, 5 decimal places), writes line-delimited GeoJSON to a temp file and shells out to **tippecanoe** to produce a `tracks-<guid>.pmtiles`. tippecanoe must be on PATH: `brew install tippecanoe` locally; the workflow builds it from source (cached).
+5. Exports the GPX paths as lines (`TrackExporter.cs`), one `MultiLineString` feature per activity, simplified with Douglas-Peucker (~5 m, 5 decimal places):
+   - **Done activities → `ExportPmTiles`**: split wherever consecutive points are more than `MaxPointGapMeters` (200 m) apart, then piped through **tippecanoe** into a `.pmtiles`. The threshold is derived from the data: GPS sampling keeps points within ~20 m (p99.9), so a larger gap means the recording was paused — e.g. a train ride between two stations, which would otherwise be drawn as a straight line across the countryside. tippecanoe must be on PATH: `brew install tippecanoe` locally; the workflow builds it from source (cached).
+   - **Planned routes → `ExportGeoJson`**: plain GeoJSON, and **never split**. They come from a route planner, so they are continuous by construction and sampled far more sparsely (median ~27 m, up to ~650 m on straight stretches) — applying the 200 m threshold shredded them into dozens of fragments.
 6. Walks up from CWD looking for `GeoQuest25.Frontend`, deletes the existing generated assets under `src/assets/`, writes new ones with fresh GUIDs, and rewrites the asset URLs in `src/app/app.component.ts`.
 
 The shape file (public swisstopo data that rarely changes) is checked into the repo under `GeoQuest25.Processing/shapefiles/` and resolved relative to the repo root, so it is available both locally and after checkout in CI.
@@ -71,6 +73,8 @@ The two Dropbox folder paths (done activities: `/Apps/HealthFitExporter`, planne
 Set locally via `dotnet user-secrets set "Dropbox:AppKey" "..."` (run from `GeoQuest25.Processing/GeoQuest25.Processing/`).
 
 `ShapeFileReader.TransformCoordinate` converts LV95 → WGS84 using the official swisstopo approximation formulas ("Näherungslösung", polynomial, ~1 m accuracy across Switzerland, ~2.3 m at the very western edge near Geneva) — no ProjNET, no datum-shift parameters needed. If higher accuracy is ever required, the reference is the swisstopo REFRAME service (`geodesy.geo.admin.ch/reframe/lv95towgs84`).
+
+It rounds the result to **5 decimal places (~1 m)**, which is the precision the transformation actually has; full double precision tripled the GeoJSON size (visited: 16.9 MB → 5.5 MB gzipped) for digits that are pure noise. Rounding is deterministic, so shared borders of neighbouring municipalities stay bit-identical — no gaps. Note this does *not* reduce the vertex count (1.15 M in `visited`, ~1.2 s of Mapbox processing on load); only topology-preserving simplification (e.g. via TopoJSON) would help there.
 
 ## Cross-cutting notes
 

@@ -185,6 +185,12 @@ await GenerateGeoJson(visited.ToArray(), $"{assetsPath}/{newVisitedFileName}");
 var newTodoFileName = $"todo-{Guid.NewGuid()}.geojson";
 await GenerateGeoJson(todo.ToArray(), $"{assetsPath}/{newTodoFileName}");
 
+// the planned routes as plain geojson: only a handful, and not sensitive (they are not
+// places the author actually goes), so unlike the tracks they are not secret-gated
+var newPlannedRoutesFileName = $"planned-{Guid.NewGuid()}.geojson";
+TrackExporter.ExportGeoJson(plannedGpxFiles, Path.Combine(assetsPath, newPlannedRoutesFileName));
+Console.WriteLine($"GeoJSON wurde nach {Path.Combine(assetsPath, newPlannedRoutesFileName)} geschrieben.");
+
 // all done-activity tracks as vector tiles (pmtiles), rendered as lines by the frontend.
 // the filename ends with the sha256 hash of the routes secret: the frontend only knows the
 // "tracks-<guid>" prefix and appends the hash it derives from the ?routes=<secret> query
@@ -203,6 +209,7 @@ var appComponentPath = Path.Combine(frontendPaht, "src/app/app.component.ts");
 var appComponentContent = await File.ReadAllTextAsync(appComponentPath);
 var newAppComponentContent = Regex.Replace(appComponentContent, @"visited-[0-9a-fA-F\-]+\.geojson", newVisitedFileName);
 newAppComponentContent = Regex.Replace(newAppComponentContent, @"todo-[0-9a-fA-F\-]+\.geojson", newTodoFileName);
+newAppComponentContent = Regex.Replace(newAppComponentContent, @"planned-[0-9a-fA-F\-]+\.geojson", newPlannedRoutesFileName);
 newAppComponentContent = Regex.Replace(newAppComponentContent, @"tracks-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", newTracksFilePrefix);
 
 await File.WriteAllTextAsync(appComponentPath, newAppComponentContent);

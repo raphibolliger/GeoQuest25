@@ -25,6 +25,19 @@
     <mgl-layer id="tracks-line" source="tracks" sourceLayer="tracks" [type]="'line'" [paint]="tracksPaint" [layout]="{ 'line-cap': 'round', 'line-join': 'round' }"></mgl-layer>
   }
 
+  <!-- planned routes (shown together with the planned municipalities) -->
+  @let plannedRoutes = plannedRoutesData.value();
+  @if (showPlanned() && plannedRoutes) {
+    <mgl-geojson-source id="planned-routes" [data]="plannedRoutes"></mgl-geojson-source>
+    <mgl-layer
+      id="planned-routes-line"
+      source="planned-routes"
+      [type]="'line'"
+      [paint]="plannedRoutesPaint"
+      [layout]="{ 'line-cap': 'round', 'line-join': 'round' }"
+    ></mgl-layer>
+  }
+
   <!-- markers -->
   @if (!position.error()) {
     @let _position = position.value();

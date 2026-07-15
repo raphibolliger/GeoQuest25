@@ -94,8 +94,10 @@ namespace GeoQuest25.Processing
                       - 0.0447 * y * y * x
                       - 0.0140 * x * x * x;
 
-            // the formulas yield values in the unit 10000" — factor 100/36 converts to degrees
-            return new Coordinate(lambda * 100 / 36, phi * 100 / 36);
+            // the formulas yield values in the unit 10000" — factor 100/36 converts to degrees.
+            // rounded to 5 decimal places (~1m): anything beyond that is precision the
+            // transformation does not have anyway, and it would triple the geojson size
+            return new Coordinate(Math.Round(lambda * 100 / 36, 5), Math.Round(phi * 100 / 36, 5));
         }
     }
 

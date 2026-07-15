@@ -42,7 +42,7 @@ export class AppComponent {
   // actually exists, so a wrong secret behaves like no secret — no url, no button.
   // mapbox-gl detects the .pmtiles extension and loads the file via range requests,
   // so only the tiles in view are actually downloaded
-  readonly #tracksFilePrefix = 'tracks-469953bd-987b-4bbc-ae6d-91e1251b48e7';
+  readonly #tracksFilePrefix = 'tracks-f582fb95-8880-45cf-89b9-6f07ee10d099';
   readonly #tracksUrlResource = resource({
     loader: async () => {
       // a secret from the query param wins; a previously proven secret is remembered in
@@ -147,9 +147,9 @@ export class AppComponent {
   });
 
   // resources
-  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-866fa360-37e9-4fd2-b84c-7e0f8d469f06.geojson');
-  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-f5963e38-1f95-4808-b0e5-d0a733e5b720.geojson');
-  readonly plannedRoutesData = httpResource<GeoJSON.FeatureCollection>(() => './assets/planned-d4328945-a575-4db1-937b-ae90fba3893b.geojson');
+  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-6f3195e8-0682-46cf-80e5-b646189c9587.geojson');
+  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-e0dfc2d2-8e6c-40d2-9275-d600d554a41a.geojson');
+  readonly plannedRoutesData = httpResource<GeoJSON.FeatureCollection>(() => './assets/planned-3c64c520-d491-457f-b4ed-d1fc37723058.geojson');
   readonly geoPermissionStatus = resource({ loader: () => navigator.permissions.query({ name: 'geolocation' }) });
   readonly position = resource({
     params: () => ({ showPosition: this.showPosition() }),

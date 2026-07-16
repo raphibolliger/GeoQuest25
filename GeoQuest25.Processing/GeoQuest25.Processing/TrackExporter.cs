@@ -14,11 +14,11 @@ namespace GeoQuest25.Processing
         // further per zoom level anyway
         private const double SimplifyToleranceDegrees = 0.00005;
 
-        // gps sampling keeps consecutive points within ~20m of each other (p99.9 over all
-        // activities), so a gap this large means the recording was paused in between — e.g.
-        // a train ride between two stations. connecting those points would draw a straight
-        // line along a route that was never travelled, so the track is split there instead.
-        private const double MaxPointGapMeters = 200;
+        // only split on very large gaps: those come from pausing the recording and resuming
+        // far away — e.g. a train ride between two stations — which would otherwise draw a
+        // straight line across the countryside. the threshold is deliberately high so that
+        // ordinary gps drop-outs (short tunnels, lost signal) keep their connecting line.
+        private const double MaxPointGapMeters = 5_000;
 
         /// <summary>
         /// Vector tiles, for the many recorded activities: only the tiles in view get loaded.

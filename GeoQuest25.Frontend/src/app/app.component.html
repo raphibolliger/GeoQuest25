@@ -52,10 +52,13 @@
 <!-- info top left (selected municipality and position control) -->
 <div class="fixed top-4 left-4 grid grid-flow-col gap-4">
   <!-- selected municipality -->
-  @if (selectedMunicipality()) {
-    <div class="bg-white p-2 rounded">
-      {{ selectedMunicipality()?.name }} <br />
-      {{ selectedMunicipality()?.firstVisit }}
+  @if (selectedMunicipality(); as municipality) {
+    <div class="bg-white p-2 rounded whitespace-nowrap">
+      {{ municipality.name }}
+      @if (municipality.firstVisit) {
+        <br />
+        {{ municipality.firstVisit | date: 'd. MMMM y' }}
+      }
     </div>
   }
 

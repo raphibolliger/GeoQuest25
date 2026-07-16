@@ -1,4 +1,4 @@
-import { NgClass } from '@angular/common';
+import { DatePipe, NgClass } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, effect, linkedSignal, resource, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -16,7 +16,7 @@ const markerIcon =
 
 @Component({
   selector: 'app-root',
-  imports: [NgClass, MapComponent, GeoJSONSourceComponent, LayerComponent, MarkerComponent, RasterDemSourceComponent, ControlComponent, VectorSourceComponent],
+  imports: [NgClass, DatePipe, MapComponent, GeoJSONSourceComponent, LayerComponent, MarkerComponent, RasterDemSourceComponent, ControlComponent, VectorSourceComponent],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './app.component.html',
 })
@@ -42,7 +42,7 @@ export class AppComponent {
   // actually exists, so a wrong secret behaves like no secret — no url, no button.
   // mapbox-gl detects the .pmtiles extension and loads the file via range requests,
   // so only the tiles in view are actually downloaded
-  readonly #tracksFilePrefix = 'tracks-f582fb95-8880-45cf-89b9-6f07ee10d099';
+  readonly #tracksFilePrefix = 'tracks-e743fe00-10d0-40e3-9808-7fbfd9fa88d1';
   readonly #tracksUrlResource = resource({
     loader: async () => {
       // a secret from the query param wins; a previously proven secret is remembered in
@@ -147,9 +147,9 @@ export class AppComponent {
   });
 
   // resources
-  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-6f3195e8-0682-46cf-80e5-b646189c9587.geojson');
-  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-e0dfc2d2-8e6c-40d2-9275-d600d554a41a.geojson');
-  readonly plannedRoutesData = httpResource<GeoJSON.FeatureCollection>(() => './assets/planned-3c64c520-d491-457f-b4ed-d1fc37723058.geojson');
+  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-a230b026-f7a5-4c3c-8d0b-8ed44939e60a.geojson');
+  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-215c98be-2262-4e6e-b2a3-38acf9f2af56.geojson');
+  readonly plannedRoutesData = httpResource<GeoJSON.FeatureCollection>(() => './assets/planned-bba23bcd-ec49-41e8-a281-9d00beb6f90b.geojson');
   readonly geoPermissionStatus = resource({ loader: () => navigator.permissions.query({ name: 'geolocation' }) });
   readonly position = resource({
     params: () => ({ showPosition: this.showPosition() }),

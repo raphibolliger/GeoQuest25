@@ -1,112 +1,128 @@
-using System.IO.Compression;
+using System.Net;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 
 namespace GeoQuest25.Processing
 {
     /// <summary>
-    /// Downloads a Dropbox folder as zip (files/download_zip) and extracts the contained
-    /// files into a temp directory, flattened so the readers can consume it non-recursively.
-    /// Authenticates via the OAuth refresh-token flow (short-lived access tokens are fetched
-    /// on demand), so it works unattended in CI.
+    /// Downloads all files of a Dropbox folder into a flat temp directory, so the readers can
+    /// consume it non-recursively. Lists the folder (files/list_folder) and downloads each file
+    /// individually (files/download) in parallel — deliberately NOT files/download_zip, which
+    /// truncates its stream server-side once the zip crosses ~4 GB (32-bit zip limit), producing
+    /// a corrupt archive. Individual downloads have no such aggregate size limit.
+    /// Authenticates via the OAuth refresh-token flow (short-lived access tokens are fetched on
+    /// demand), so it works unattended in CI.
     /// </summary>
     public sealed class DropboxDownloader(string appKey, string appSecret, string refreshToken) : IDisposable
     {
-        private readonly HttpClient _httpClient = new() { Timeout = Timeout.InfiniteTimeSpan };
+        private const int MaxParallelDownloads = 8;
+        private const int MaxAttemptsPerFile = 4;
+
+        private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromMinutes(5) };
         private string? _accessToken;
 
         /// <param name="dropboxFolderPath">Folder path within Dropbox, e.g. "/Apps/HealthFitExporter".</param>
-        /// <param name="fileExtension">Optional filter, e.g. ".gpx"; null extracts every file.</param>
-        private const int MaxDownloadAttempts = 3;
-
+        /// <param name="fileExtension">Optional filter, e.g. ".gpx"; null downloads every file.</param>
         public async Task<string> DownloadFolderAsync(string dropboxFolderPath, string? fileExtension = null)
-        {
-            for (var attempt = 1; ; attempt++)
-            {
-                var zipFilePath = Path.GetTempFileName();
-                try
-                {
-                    await DownloadZipToFileAsync(dropboxFolderPath, zipFilePath);
-                    return ExtractFolder(zipFilePath, dropboxFolderPath, fileExtension);
-                }
-                catch (InvalidDataException) when (attempt < MaxDownloadAttempts)
-                {
-                    // the downloaded file is not a complete zip. download_zip streams with
-                    // chunked encoding, so a dropped connection ends the stream cleanly rather
-                    // than throwing — the result is a truncated file. retry the whole download.
-                    Console.WriteLine($"Downloaded zip for \"{dropboxFolderPath}\" was incomplete (attempt {attempt}/{MaxDownloadAttempts}); retrying ...");
-                }
-                finally
-                {
-                    File.Delete(zipFilePath);
-                }
-            }
-        }
-
-        private async Task DownloadZipToFileAsync(string dropboxFolderPath, string zipFilePath)
         {
             var accessToken = _accessToken ??= await GetAccessTokenAsync();
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, "https://content.dropboxapi.com/2/files/download_zip");
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            request.Headers.Add("Dropbox-API-Arg", JsonSerializer.Serialize(new { path = dropboxFolderPath }));
-
-            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
-            if (!response.IsSuccessStatusCode)
-            {
-                var error = await response.Content.ReadAsStringAsync();
-                throw new ApplicationException($"Dropbox download_zip for \"{dropboxFolderPath}\" failed ({(int)response.StatusCode}): {error}");
-            }
-
-            // a zip download is binary; if dropbox answers 2xx with a json/text body (an error
-            // delivered mid-stream, a gateway page, ...) surface it instead of later failing as
-            // a cryptic "not a zip"
-            var mediaType = response.Content.Headers.ContentType?.MediaType ?? "";
-            if (mediaType.Contains("json", StringComparison.OrdinalIgnoreCase) || mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase))
-            {
-                var body = await response.Content.ReadAsStringAsync();
-                throw new ApplicationException($"Dropbox download_zip for \"{dropboxFolderPath}\" returned {mediaType} instead of a zip: {body}");
-            }
-
-            await CopyWithProgressAsync(response, zipFilePath);
-        }
-
-        private static string ExtractFolder(string zipFilePath, string dropboxFolderPath, string? fileExtension)
-        {
-            // ZipFile.OpenRead throws InvalidDataException if the file is not a complete zip
-            using var archive = ZipFile.OpenRead(zipFilePath);
+            var filePaths = await ListFilePathsAsync(accessToken, dropboxFolderPath, fileExtension);
+            Console.WriteLine($"Downloading {filePaths.Count} files from \"{dropboxFolderPath}\" ...");
 
             var targetDirectory = Directory.CreateTempSubdirectory("geoquest-").FullName;
-            var extractedCount = 0;
-            foreach (var entry in archive.Entries)
-            {
-                if (entry.Name.Length == 0) continue; // directory entry
-                if (fileExtension is not null && !entry.Name.EndsWith(fileExtension, StringComparison.OrdinalIgnoreCase)) continue;
-                entry.ExtractToFile(Path.Combine(targetDirectory, entry.Name), overwrite: true);
-                extractedCount++;
-            }
+            using var throttle = new SemaphoreSlim(MaxParallelDownloads);
+            var downloaded = 0;
 
-            Console.WriteLine($"Downloaded \"{dropboxFolderPath}\" from Dropbox: {extractedCount} files");
+            await Task.WhenAll(filePaths.Select(async filePath =>
+            {
+                await throttle.WaitAsync();
+                try
+                {
+                    await DownloadFileAsync(accessToken, filePath, targetDirectory);
+                    var done = Interlocked.Increment(ref downloaded);
+                    if (done % 500 == 0)
+                        Console.WriteLine($"  ... {done}/{filePaths.Count} files downloaded");
+                }
+                finally
+                {
+                    throttle.Release();
+                }
+            }));
+
+            Console.WriteLine($"Downloaded \"{dropboxFolderPath}\" from Dropbox: {filePaths.Count} files");
             return targetDirectory;
         }
 
-        private async Task CopyWithProgressAsync(HttpResponseMessage response, string zipFilePath)
+        // full display paths (original case preserved — the readers filter file names case-sensitively)
+        private async Task<List<string>> ListFilePathsAsync(string accessToken, string dropboxFolderPath, string? fileExtension)
         {
-            await using var zipFileStream = File.Create(zipFilePath);
-            await using var contentStream = await response.Content.ReadAsStreamAsync();
+            var filePaths = new List<string>();
+            var requestUri = "https://api.dropboxapi.com/2/files/list_folder";
+            object body = new { path = dropboxFolderPath, recursive = false, limit = 2000 };
 
-            var buffer = new byte[1 << 20];
-            long totalBytes = 0;
-            long nextLogAt = 512L * 1024 * 1024;
-            int bytesRead;
-            while ((bytesRead = await contentStream.ReadAsync(buffer)) > 0)
+            while (true)
             {
-                await zipFileStream.WriteAsync(buffer.AsMemory(0, bytesRead));
-                totalBytes += bytesRead;
-                if (totalBytes >= nextLogAt)
+                using var request = new HttpRequestMessage(HttpMethod.Post, requestUri)
                 {
-                    Console.WriteLine($"  ... {totalBytes / (1024 * 1024)} MB downloaded");
-                    nextLogAt += 512L * 1024 * 1024;
+                    Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"),
+                };
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+                using var response = await _httpClient.SendAsync(request);
+                var payload = await response.Content.ReadAsStringAsync();
+                if (!response.IsSuccessStatusCode)
+                    throw new ApplicationException($"Dropbox list_folder for \"{dropboxFolderPath}\" failed ({(int)response.StatusCode}): {payload}");
+
+                using var document = JsonDocument.Parse(payload);
+                var root = document.RootElement;
+                foreach (var entry in root.GetProperty("entries").EnumerateArray())
+                {
+                    if (entry.GetProperty(".tag").GetString() != "file") continue;
+                    var name = entry.GetProperty("name").GetString() ?? "";
+                    if (fileExtension is not null && !name.EndsWith(fileExtension, StringComparison.OrdinalIgnoreCase)) continue;
+                    filePaths.Add(entry.GetProperty("path_display").GetString()!);
+                }
+
+                if (!root.GetProperty("has_more").GetBoolean())
+                    return filePaths;
+
+                requestUri = "https://api.dropboxapi.com/2/files/list_folder/continue";
+                body = new { cursor = root.GetProperty("cursor").GetString() };
+            }
+        }
+
+        private async Task DownloadFileAsync(string accessToken, string dropboxFilePath, string targetDirectory)
+        {
+            var targetFilePath = Path.Combine(targetDirectory, Path.GetFileName(dropboxFilePath));
+
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    using var request = new HttpRequestMessage(HttpMethod.Post, "https://content.dropboxapi.com/2/files/download");
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                    // non-ascii chars in the path (e.g. a curly apostrophe) are \uXXXX-escaped by
+                    // the default json encoder, which keeps the header value ascii-safe as required
+                    request.Headers.Add("Dropbox-API-Arg", JsonSerializer.Serialize(new { path = dropboxFilePath }));
+
+                    using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+                    if (response.StatusCode is HttpStatusCode.TooManyRequests || (int)response.StatusCode >= 500)
+                        throw new HttpRequestException($"transient Dropbox status {(int)response.StatusCode}");
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var error = await response.Content.ReadAsStringAsync();
+                        throw new ApplicationException($"Dropbox download for \"{dropboxFilePath}\" failed ({(int)response.StatusCode}): {error}");
+                    }
+
+                    await using var target = File.Create(targetFilePath);
+                    await response.Content.CopyToAsync(target);
+                    return;
+                }
+                catch (Exception ex) when (ex is HttpRequestException or IOException or TaskCanceledException && attempt < MaxAttemptsPerFile)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(attempt * 2));
                 }
             }
         }

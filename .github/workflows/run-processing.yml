@@ -31,7 +31,7 @@ jobs:
       # for ubuntu, so build it from source once and cache the binaries
       - name: Cache tippecanoe
         id: cache-tippecanoe
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/tippecanoe-bin
           key: tippecanoe-${{ runner.os }}-v1

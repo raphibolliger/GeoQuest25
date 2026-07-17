@@ -17,7 +17,33 @@ namespace GeoQuest25.Processing
 
         /// <param name="dropboxFolderPath">Folder path within Dropbox, e.g. "/Apps/HealthFitExporter".</param>
         /// <param name="fileExtension">Optional filter, e.g. ".gpx"; null extracts every file.</param>
+        private const int MaxDownloadAttempts = 3;
+
         public async Task<string> DownloadFolderAsync(string dropboxFolderPath, string? fileExtension = null)
+        {
+            for (var attempt = 1; ; attempt++)
+            {
+                var zipFilePath = Path.GetTempFileName();
+                try
+                {
+                    await DownloadZipToFileAsync(dropboxFolderPath, zipFilePath);
+                    return ExtractFolder(zipFilePath, dropboxFolderPath, fileExtension);
+                }
+                catch (InvalidDataException) when (attempt < MaxDownloadAttempts)
+                {
+                    // the downloaded file is not a complete zip. download_zip streams with
+                    // chunked encoding, so a dropped connection ends the stream cleanly rather
+                    // than throwing — the result is a truncated file. retry the whole download.
+                    Console.WriteLine($"Downloaded zip for \"{dropboxFolderPath}\" was incomplete (attempt {attempt}/{MaxDownloadAttempts}); retrying ...");
+                }
+                finally
+                {
+                    File.Delete(zipFilePath);
+                }
+            }
+        }
+
+        private async Task DownloadZipToFileAsync(string dropboxFolderPath, string zipFilePath)
         {
             var accessToken = _accessToken ??= await GetAccessTokenAsync();
 
@@ -32,29 +58,36 @@ namespace GeoQuest25.Processing
                 throw new ApplicationException($"Dropbox download_zip for \"{dropboxFolderPath}\" failed ({(int)response.StatusCode}): {error}");
             }
 
-            var zipFilePath = Path.GetTempFileName();
-            try
+            // a zip download is binary; if dropbox answers 2xx with a json/text body (an error
+            // delivered mid-stream, a gateway page, ...) surface it instead of later failing as
+            // a cryptic "not a zip"
+            var mediaType = response.Content.Headers.ContentType?.MediaType ?? "";
+            if (mediaType.Contains("json", StringComparison.OrdinalIgnoreCase) || mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase))
             {
-                await CopyWithProgressAsync(response, zipFilePath);
-
-                var targetDirectory = Directory.CreateTempSubdirectory("geoquest-").FullName;
-                var extractedCount = 0;
-                using var archive = ZipFile.OpenRead(zipFilePath);
-                foreach (var entry in archive.Entries)
-                {
-                    if (entry.Name.Length == 0) continue; // directory entry
-                    if (fileExtension is not null && !entry.Name.EndsWith(fileExtension, StringComparison.OrdinalIgnoreCase)) continue;
-                    entry.ExtractToFile(Path.Combine(targetDirectory, entry.Name), overwrite: true);
-                    extractedCount++;
-                }
-
-                Console.WriteLine($"Downloaded \"{dropboxFolderPath}\" from Dropbox: {extractedCount} files");
-                return targetDirectory;
+                var body = await response.Content.ReadAsStringAsync();
+                throw new ApplicationException($"Dropbox download_zip for \"{dropboxFolderPath}\" returned {mediaType} instead of a zip: {body}");
             }
-            finally
+
+            await CopyWithProgressAsync(response, zipFilePath);
+        }
+
+        private static string ExtractFolder(string zipFilePath, string dropboxFolderPath, string? fileExtension)
+        {
+            // ZipFile.OpenRead throws InvalidDataException if the file is not a complete zip
+            using var archive = ZipFile.OpenRead(zipFilePath);
+
+            var targetDirectory = Directory.CreateTempSubdirectory("geoquest-").FullName;
+            var extractedCount = 0;
+            foreach (var entry in archive.Entries)
             {
-                File.Delete(zipFilePath);
+                if (entry.Name.Length == 0) continue; // directory entry
+                if (fileExtension is not null && !entry.Name.EndsWith(fileExtension, StringComparison.OrdinalIgnoreCase)) continue;
+                entry.ExtractToFile(Path.Combine(targetDirectory, entry.Name), overwrite: true);
+                extractedCount++;
             }
+
+            Console.WriteLine($"Downloaded \"{dropboxFolderPath}\" from Dropbox: {extractedCount} files");
+            return targetDirectory;
         }
 
         private async Task CopyWithProgressAsync(HttpResponseMessage response, string zipFilePath)

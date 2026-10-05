@@ -14,6 +14,8 @@ const markerIcon =
     </svg>
   `);
 
+const routesSecretLongPressMs = 4000;
+
 @Component({
   selector: 'app-root',
   imports: [NgClass, DatePipe, MapComponent, GeoJSONSourceComponent, LayerComponent, MarkerComponent, RasterDemSourceComponent, ControlComponent, VectorSourceComponent],
@@ -35,6 +37,11 @@ export class AppComponent {
   readonly showTerrain = signal(false);
   readonly showPlanned = signal(false);
   readonly showTracks = signal(false);
+  readonly showRoutesSecretDialog = signal(false);
+  readonly routesSecretRejected = signal(false);
+
+  #plannedLongPressTimer: ReturnType<typeof setTimeout> | undefined;
+  #plannedLongPressFired = false;
 
   // the tracks file name ends with the sha256 hash of the routes secret; only the
   // "tracks-<guid>" prefix (rewritten by the processing pipeline) is known here, the hash
@@ -206,6 +213,42 @@ export class AppComponent {
 
   toggleLocation(): void {
     this.showPosition.update((prev) => !prev);
+  }
+
+  startPlannedLongPress(): void {
+    this.#plannedLongPressFired = false;
+    clearTimeout(this.#plannedLongPressTimer);
+    this.#plannedLongPressTimer = setTimeout(() => {
+      this.#plannedLongPressFired = true;
+      this.routesSecretRejected.set(false);
+      this.showRoutesSecretDialog.set(true);
+    }, routesSecretLongPressMs);
+  }
+
+  cancelPlannedLongPress(): void {
+    clearTimeout(this.#plannedLongPressTimer);
+  }
+
+  togglePlanned(): void {
+    if (this.#plannedLongPressFired) {
+      this.#plannedLongPressFired = false;
+      return;
+    }
+    this.showPlanned.update((prev) => !prev);
+  }
+
+  async submitRoutesSecret(event: Event, secret: string): Promise<void> {
+    event.preventDefault();
+    const trimmedSecret = secret.trim();
+    const url = trimmedSecret ? await this.#probeTracksUrl(trimmedSecret).catch(() => undefined) : undefined;
+    if (!url) {
+      this.routesSecretRejected.set(true);
+      return;
+    }
+    localStorage.setItem('routesSecret', trimmedSecret);
+    this.#tracksUrlResource.set(url);
+    this.showTracks.set(true);
+    this.showRoutesSecretDialog.set(false);
   }
 }
 

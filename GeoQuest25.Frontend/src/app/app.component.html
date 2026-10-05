@@ -83,9 +83,14 @@
 
   <!-- planning control -->
   <div
-    class="grid items-center justify-center aspect-square rounded p-2 cursor-pointer"
+    class="grid items-center justify-center aspect-square rounded p-2 cursor-pointer select-none [-webkit-touch-callout:none]"
     [ngClass]="{ 'bg-white': !showPlanned(), 'bg-green-600': showPlanned(), 'text-white': showPlanned() }"
-    (click)="showPlanned.set(!showPlanned())"
+    (pointerdown)="startPlannedLongPress()"
+    (pointerup)="cancelPlannedLongPress()"
+    (pointerleave)="cancelPlannedLongPress()"
+    (pointercancel)="cancelPlannedLongPress()"
+    (contextmenu)="$event.preventDefault()"
+    (click)="togglePlanned()"
     title="Toggle Planned"
   >
     <span class="material-symbols-rounded text-3xl"> tactic </span>
@@ -150,5 +155,32 @@
 @if (positionError) {
   <div class="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-[calc(env(safe-area-inset-right)+1rem)] border-2 border-red-500 bg-red-100 shadow rounded p-2">
     {{ positionError }}
+  </div>
+}
+
+@if (showRoutesSecretDialog()) {
+  <div class="fixed inset-0 grid place-items-center bg-black/40 p-4">
+    <form class="grid w-full max-w-sm gap-3 rounded bg-white p-4 shadow" (submit)="submitRoutesSecret($event, routesSecretInput.value)">
+      <label for="routes-secret">Routes secret</label>
+      <input
+        #routesSecretInput
+        id="routes-secret"
+        type="text"
+        class="rounded border border-gray-300 px-2 py-1"
+        [ngClass]="{ 'border-red-500': routesSecretRejected() }"
+        autocomplete="off"
+        autocapitalize="off"
+        autocorrect="off"
+        spellcheck="false"
+        (input)="routesSecretRejected.set(false)"
+      />
+      @if (routesSecretRejected()) {
+        <div class="text-sm text-red-600">Unknown secret</div>
+      }
+      <div class="flex justify-end gap-2">
+        <button type="button" class="rounded px-4 py-2 cursor-pointer hover:bg-gray-100" (click)="showRoutesSecretDialog.set(false)">Cancel</button>
+        <button type="submit" class="rounded bg-blue-500 px-4 py-2 text-white cursor-pointer hover:bg-blue-600">Save</button>
+      </div>
+    </form>
   </div>
 }

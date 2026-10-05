@@ -50,7 +50,7 @@
 </mgl-map>
 
 <!-- info top left (selected municipality and position control) -->
-<div class="fixed top-4 left-4 grid grid-flow-col gap-4">
+<div class="fixed top-[calc(env(safe-area-inset-top)+1rem)] left-[calc(env(safe-area-inset-left)+1rem)] grid grid-flow-col gap-4">
   <!-- selected municipality -->
   @if (selectedMunicipality(); as municipality) {
     <div class="bg-white p-2 rounded whitespace-nowrap">
@@ -106,14 +106,14 @@
 
 <!-- info top right (visited and todo count) -->
 @if (visitedCount() && todoCount()) {
-  <div class="fixed top-4 right-4 bg-white p-2 rounded max-w-[50%]">
+  <div class="fixed top-[calc(env(safe-area-inset-top)+1rem)] right-[calc(env(safe-area-inset-right)+1rem)] bg-white p-2 rounded max-w-[50%]">
     {{ visitedCount() }} of {{ totalCount() }} visited <br />
     {{ todoCount() }} not visited
   </div>
 }
 
 <!-- info bottom left (map styles) -->¨
-<div class="fixed bottom-4 left-4 bg-white rounded overflow-hidden">
+<div class="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] left-[calc(env(safe-area-inset-left)+1rem)] bg-white rounded overflow-hidden">
   <button
     type="button"
     class="py-2 px-4 border-r border-gray-300 cursor-pointer hover:bg-blue-500 hover:text-white transition-all duration-300"
@@ -148,7 +148,7 @@
 
 @let positionError = position.error();
 @if (positionError) {
-  <div class="fixed bottom-4 right-4 border-2 border-red-500 bg-red-100 shadow rounded p-2">
+  <div class="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-[calc(env(safe-area-inset-right)+1rem)] border-2 border-red-500 bg-red-100 shadow rounded p-2">
     {{ positionError }}
   </div>
 }

@@ -38,6 +38,14 @@ The tracks filename ends with the SHA-256 hex hash of a secret (`Gpx:RoutesSecre
 
 A secret that passed the probe is persisted in `localStorage` (`routesSecret`), so subsequent visits work without the query param. The query param takes precedence over the stored value; if no candidate passes the probe (e.g. after a secret rotation), the stored value is removed again. The assets are **not checked in**; for local development you must run the Processing pipeline once to produce them, otherwise the map 404s on load. Note that a local pipeline run therefore always leaves `app.component.ts` modified (new GUIDs) — that change is committable noise, the workflow rewrites it anyway during deployment.
 
+### Home screen app (standalone, iOS)
+
+`public/manifest.webmanifest` (`display: standalone`) plus the `apple-mobile-web-app-*` meta tags in `index.html` make the app open full-screen from the iPhone home screen instead of as a Safari tab. The status bar is `black-translucent` with `viewport-fit=cover`, so the map runs under the notch / home indicator; every fixed overlay in `app.component.html` and the Mapbox control corners in `styles.scss` are therefore offset by `env(safe-area-inset-*)`. New overlays must do the same.
+
+The manifest deliberately has **no `start_url`**: it then defaults to the URL the app was added from. A home screen app on iOS gets its own `localStorage`, separate from Safari, and has no address bar — adding it from `…/?routes=<secret>` is the only way to get the routes secret into it. There is no service worker (no offline use; the map needs the network anyway).
+
+Icons and favicons live in `public/` (copied as-is by the `assets` glob in `angular.json`). The logo is the Swiss canton map (dissolved from the swissBOUNDARIES3D shape file) on a neutral grey background — done cantons blue, Valais and Ticino white as "still to go", light grey borders — with four hand-drawn sport pictograms in the corners (cycling, running, snowboard, cross-country skiing; one shared line style, round caps, filled head). The maskable icon and the favicon leave the pictograms out; `icons/logo.svg` is the vector master, the PNGs (`apple-touch-icon.png` 180 px opaque, `icon-192/512.png` with rounded transparent corners, `icon-maskable-512.png` full bleed with the content inside the 80 % safe zone) are renders of it.
+
 ## Processing (`GeoQuest25.Processing/`)
 
 Commands (run from `GeoQuest25.Processing/`):

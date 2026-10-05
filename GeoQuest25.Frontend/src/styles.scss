@@ -8,3 +8,23 @@ html {
   font-family: "Noto Sans", sans-serif;
   font-size: 16px;
 }
+
+.mapboxgl-ctrl-top-left,
+.mapboxgl-ctrl-top-right {
+  top: env(safe-area-inset-top);
+}
+
+.mapboxgl-ctrl-bottom-left,
+.mapboxgl-ctrl-bottom-right {
+  bottom: env(safe-area-inset-bottom);
+}
+
+.mapboxgl-ctrl-top-left,
+.mapboxgl-ctrl-bottom-left {
+  left: env(safe-area-inset-left);
+}
+
+.mapboxgl-ctrl-top-right,
+.mapboxgl-ctrl-bottom-right {
+  right: env(safe-area-inset-right);
+}

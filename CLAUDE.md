@@ -40,7 +40,9 @@ A secret that passed the probe is persisted in `localStorage` (`routesSecret`), 
 
 ### Home screen app (standalone, iOS)
 
-`public/manifest.webmanifest` (`display: standalone`) plus the `apple-mobile-web-app-*` meta tags in `index.html` make the app open full-screen from the iPhone home screen instead of as a Safari tab. The status bar is `black-translucent` with `viewport-fit=cover`, so the map runs under the notch / home indicator; every fixed overlay in `app.component.html` and the Mapbox control corners in `styles.scss` are therefore offset by `env(safe-area-inset-*)`. New overlays must do the same.
+`public/manifest.webmanifest` (`display: standalone`) plus the `apple-mobile-web-app-*` meta tags in `index.html` make the app open full-screen from the iPhone home screen instead of as a Safari tab. With `viewport-fit=cover` the map runs under the home indicator (and the notch in landscape); every fixed overlay in `app.component.html` and the Mapbox control corners in `styles.scss` are therefore offset by `env(safe-area-inset-*)`. New overlays must do the same.
+
+The status bar style is deliberately `default` (opaque), **not** `black-translucent`. With `black-translucent`, iOS 26 has a WebKit regression in home screen apps: the web view starts under the status bar but its height is still reduced by the status bar height, leaving an unpaintable band of exactly that height at the bottom of the screen (even `position: fixed; inset: 0` stops above it). See WebKit bug 301108 / Apple Developer Forums thread 800798.
 
 The manifest deliberately has **no `start_url`**: it then defaults to the URL the app was added from. A home screen app on iOS gets its own `localStorage`, separate from Safari, and has no address bar — adding it from `…/?routes=<secret>` is the only way to get the routes secret into it. There is no service worker (no offline use; the map needs the network anyway).
 

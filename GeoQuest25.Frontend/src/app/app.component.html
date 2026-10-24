@@ -1,5 +1,5 @@
-<mgl-map #map class="fixed inset-0" [style]="mapStyle()" [zoom]="[7.5]" [center]="[8.226667, 46.801111]" [antialias]="true" (mapLoad)="onLoad($event)">
-  @let visited = visitedData.value(); @let todo = todoData.value();
+<mgl-map #map class="fixed inset-0" [style]="mapStyle()" [zoom]="[7.5]" [center]="[8.226667, 46.801111]" [antialias]="true" (mapLoad)="onLoad($event)" (idle)="onIdle()">
+  @let visited = visitedGeoJson(); @let todo = todoGeoJson();
 
   <mgl-raster-dem-source id="mapbox-dem" [url]="'mapbox://mapbox.mapbox-terrain-dem-v1'" [tileSize]="512" [maxzoom]="14"> </mgl-raster-dem-source>
   <mgl-control mglNavigation position="top-right"></mgl-control>
@@ -26,7 +26,7 @@
   }
 
   <!-- planned routes (shown together with the planned municipalities) -->
-  @let plannedRoutes = plannedRoutesData.value();
+  @let plannedRoutes = plannedRoutesGeoJson();
   @if (showPlanned() && plannedRoutes) {
     <mgl-geojson-source id="planned-routes" [data]="plannedRoutes"></mgl-geojson-source>
     <mgl-layer
@@ -155,6 +155,51 @@
 @if (positionError) {
   <div class="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-[calc(env(safe-area-inset-right)+1rem)] border-2 border-red-500 bg-red-100 shadow rounded p-2">
     {{ positionError }}
+  </div>
+}
+
+@if (!municipalitiesDrawn()) {
+  <div class="fixed inset-0 grid place-items-center p-4 pointer-events-none">
+    <div class="grid w-64 gap-3 rounded bg-white p-4 shadow" role="status">
+      <div class="font-semibold">Loading map</div>
+      @for (step of loadingSteps(); track step.label) {
+        <div class="grid grid-cols-[1.25rem_1fr_auto] items-center gap-x-2 gap-y-1">
+          @switch (step.state) {
+            @case ('done') {
+              <svg class="size-5 text-blue-500" viewBox="0 0 20 20" aria-hidden="true">
+                <circle cx="10" cy="10" r="10" fill="currentColor" />
+                <path d="M6 10.5l2.5 2.5L14 7.5" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            }
+            @case ('active') {
+              <span class="size-5 animate-spin rounded-full border-2 border-gray-200 border-t-blue-500"></span>
+            }
+            @case ('failed') {
+              <svg class="size-5 text-red-500" viewBox="0 0 20 20" aria-hidden="true">
+                <circle cx="10" cy="10" r="10" fill="currentColor" />
+                <path d="M7 7l6 6M13 7l-6 6" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" />
+              </svg>
+            }
+            @default {
+              <span class="size-5 rounded-full border-2 border-gray-200"></span>
+            }
+          }
+          <span [ngClass]="{ 'text-gray-400': step.state === 'pending', 'text-red-600': step.state === 'failed' }">{{ step.label }}</span>
+          @if (step.progress; as progress) {
+            <span class="text-sm tabular-nums text-gray-500">{{ progress.percent }} %</span>
+            <div class="col-span-2 col-start-2 h-1.5 overflow-hidden rounded bg-gray-200">
+              <div class="h-full bg-blue-500 transition-[width]" [style.width.%]="progress.percent"></div>
+            </div>
+            <span class="col-span-2 col-start-2 text-sm tabular-nums text-gray-500">
+              {{ progress.loadedMegabytes | number: '1.1-1' }} of {{ progress.totalMegabytes | number: '1.1-1' }} MB
+            </span>
+          }
+        </div>
+      }
+      @if (loadingFailed()) {
+        <button type="button" class="pointer-events-auto rounded bg-blue-500 px-4 py-2 text-white cursor-pointer hover:bg-blue-600" (click)="retryLoading()">Retry</button>
+      }
+    </div>
   </div>
 }
 

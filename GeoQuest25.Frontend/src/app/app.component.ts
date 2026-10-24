@@ -1,10 +1,11 @@
-import { DatePipe, NgClass } from '@angular/common';
+import { DatePipe, DecimalPipe, NgClass } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, effect, linkedSignal, resource, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ExpressionSpecification, FillLayerSpecification, Map, MapEventType, MapMouseEvent } from 'mapbox-gl';
 import { ControlComponent, GeoJSONSourceComponent, LayerComponent, MapComponent, MarkerComponent, RasterDemSourceComponent, VectorSourceComponent } from 'ngx-mapbox-gl';
 import { fromEvent } from 'rxjs';
+import { geoJsonResource } from './geojson-resource';
 
 const markerIcon =
   'data:image/svg+xml;charset=utf-8,' +
@@ -15,10 +16,30 @@ const markerIcon =
   `);
 
 const routesSecretLongPressMs = 4000;
+const bytesPerMegabyte = 1_000_000;
+
+type LoadingState = 'pending' | 'active' | 'done' | 'failed';
+
+interface LoadingStep {
+  label: string;
+  state: LoadingState;
+  progress?: { loadedMegabytes: number; totalMegabytes: number; percent: number };
+}
 
 @Component({
   selector: 'app-root',
-  imports: [NgClass, DatePipe, MapComponent, GeoJSONSourceComponent, LayerComponent, MarkerComponent, RasterDemSourceComponent, ControlComponent, VectorSourceComponent],
+  imports: [
+    NgClass,
+    DatePipe,
+    DecimalPipe,
+    MapComponent,
+    GeoJSONSourceComponent,
+    LayerComponent,
+    MarkerComponent,
+    RasterDemSourceComponent,
+    ControlComponent,
+    VectorSourceComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './app.component.html',
 })
@@ -39,6 +60,7 @@ export class AppComponent {
   readonly showTracks = signal(false);
   readonly showRoutesSecretDialog = signal(false);
   readonly routesSecretRejected = signal(false);
+  readonly municipalitiesDrawn = signal(false);
 
   #plannedLongPressTimer: ReturnType<typeof setTimeout> | undefined;
   #plannedLongPressFired = false;
@@ -49,7 +71,7 @@ export class AppComponent {
   // actually exists, so a wrong secret behaves like no secret — no url, no button.
   // mapbox-gl detects the .pmtiles extension and loads the file via range requests,
   // so only the tiles in view are actually downloaded
-  readonly #tracksFilePrefix = 'tracks-d4b77e76-43a2-4712-a00c-7728d40fe435';
+  readonly #tracksFilePrefix = 'tracks-c4b2b953-36d6-4d7c-b435-311689164336';
   readonly #tracksUrlResource = resource({
     loader: async () => {
       // a secret from the query param wins; a previously proven secret is remembered in
@@ -129,8 +151,44 @@ export class AppComponent {
     }
   });
 
-  readonly visitedCount = computed(() => this.visitedData.value()?.features.length);
-  readonly todoCount = computed(() => this.todoData.value()?.features.length);
+  readonly visitedGeoJson = computed(() => (this.visitedData.hasValue() ? this.visitedData.value() : undefined));
+  readonly todoGeoJson = computed(() => (this.todoData.hasValue() ? this.todoData.value() : undefined));
+  readonly plannedRoutesGeoJson = computed(() => (this.plannedRoutesData.hasValue() ? this.plannedRoutesData.value() : undefined));
+
+  readonly municipalitiesLoadingState = computed<LoadingState>(() => {
+    if (this.visitedData.error() || this.todoData.error()) {
+      return 'failed';
+    }
+    return this.visitedGeoJson() && this.todoGeoJson() ? 'done' : 'active';
+  });
+  readonly municipalitiesLoadingProgress = computed(() => {
+    const totalBytes = this.visitedData.totalBytes + this.todoData.totalBytes;
+    const loadedBytes = Math.min(this.visitedData.loadedBytes() + this.todoData.loadedBytes(), totalBytes);
+    return {
+      loadedMegabytes: loadedBytes / bytesPerMegabyte,
+      totalMegabytes: totalBytes / bytesPerMegabyte,
+      percent: Math.floor((loadedBytes / totalBytes) * 100),
+    };
+  });
+  readonly loadingSteps = computed<LoadingStep[]>(() => {
+    const baseMapLoaded = this.map() !== undefined;
+    const municipalitiesState = this.municipalitiesLoadingState();
+    const drawingState = this.municipalitiesDrawn() ? 'done' : baseMapLoaded && municipalitiesState === 'done' ? 'active' : 'pending';
+    return [
+      { label: 'App', state: 'done' },
+      { label: 'Base map', state: baseMapLoaded ? 'done' : 'active' },
+      {
+        label: 'Municipalities',
+        state: municipalitiesState,
+        progress: municipalitiesState === 'active' ? this.municipalitiesLoadingProgress() : undefined,
+      },
+      { label: 'Drawing', state: drawingState },
+    ];
+  });
+  readonly loadingFailed = computed(() => this.municipalitiesLoadingState() === 'failed');
+
+  readonly visitedCount = computed(() => this.visitedGeoJson()?.features.length);
+  readonly todoCount = computed(() => this.todoGeoJson()?.features.length);
   readonly totalCount = computed(() => (this.visitedCount() ?? 0) + (this.todoCount() ?? 0));
   readonly visitedPaint = computed<FillLayerSpecification['paint']>(() => {
     const showTransparent = this.showTransparent();
@@ -154,9 +212,9 @@ export class AppComponent {
   });
 
   // resources
-  readonly visitedData = httpResource<GeoJSON.FeatureCollection>(() => './assets/visited-efcadbd0-b483-4fd3-95f0-391dd7404982.geojson');
-  readonly todoData = httpResource<GeoJSON.FeatureCollection>(() => './assets/todo-1d37b062-1381-4cc0-9522-e62205d27f2c.geojson');
-  readonly plannedRoutesData = httpResource<GeoJSON.FeatureCollection>(() => './assets/planned-9764aa48-ce8e-4033-9c58-9a251714939b.geojson');
+  readonly visitedData = geoJsonResource('./assets/visited-83476a9a-53d9-4f47-a812-6d3243a84693.geojson', 22611872);
+  readonly todoData = geoJsonResource('./assets/todo-09b3b6e5-81d0-4f7c-8a96-e8f31f6c609e.geojson', 2091531);
+  readonly plannedRoutesData = httpResource<GeoJSON.FeatureCollection>(() => './assets/planned-69f183f6-2598-421a-81bc-32ef8a04d75c.geojson');
   readonly geoPermissionStatus = resource({ loader: () => navigator.permissions.query({ name: 'geolocation' }) });
   readonly position = resource({
     params: () => ({ showPosition: this.showPosition() }),
@@ -204,6 +262,22 @@ export class AppComponent {
   // view actions
   onLoad(event: { type: MapEventType; target: Map }): void {
     this.map.set(event.target);
+  }
+
+  onIdle(): void {
+    const map = this.map();
+    if (map?.getSource('visited') && map.getSource('todo')) {
+      this.municipalitiesDrawn.set(true);
+    }
+  }
+
+  retryLoading(): void {
+    if (this.visitedData.error()) {
+      this.visitedData.reload();
+    }
+    if (this.todoData.error()) {
+      this.todoData.reload();
+    }
   }
 
   layerClick($event: MapMouseEvent): void {

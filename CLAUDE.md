@@ -30,7 +30,13 @@ Stack & conventions:
 
 ### GeoJSON assets are generated, gitignored and cache-busted with GUIDs
 
-A pipeline run writes one `visited-<guid>.geojson`, one `todo-<guid>.geojson`, one `planned-<guid>.geojson` (the planned routes as lines) and one `tracks-<guid>-<hash>.pmtiles` into `src/assets/` (deleting any previous ones) and rewrites the asset URLs in `app.component.ts` to match.
+A pipeline run writes one `visited-<guid>.geojson`, one `todo-<guid>.geojson`, one `planned-<guid>.geojson` (the planned routes as lines) and one `tracks-<guid>-<hash>.pmtiles` into `src/assets/` (deleting any previous ones) and rewrites the asset URLs in `app.component.ts` to match. For `visited` and `todo` it also rewrites the file size in bytes that follows the URL (`geoJsonResource('./assets/visited-<guid>.geojson', <bytes>)`), which the loading indicator needs. The rewrite regex expects exactly that `', <bytes>` shape.
+
+### Loading indicator
+
+On a slow connection, a card in the middle of the screen shows the loading steps: App, Base map, Municipalities (percentage and MB), Drawing. A static copy of the card sits inside `<app-root>` in `index.html`, so it is visible while the JS bundle is still downloading (Angular replaces it on bootstrap; its Tailwind classes end up in the inlined critical CSS). The component's card disappears once the map fires `idle` with both municipality sources added. If the download fails, the step turns red and offers a Retry button.
+
+The municipality GeoJSON is loaded via `geoJsonResource` (`geojson-resource.ts`), not `httpResource`: it counts the **decoded** bytes of the fetch stream itself and divides by the size the pipeline wrote. The browser's own progress numbers can't be used, because GitHub Pages serves the files gzipped (`Content-Length` is the compressed size, ~6.4 of 24.3 MB), and Safari's XHR progress counts decoded bytes against that compressed total. A `Range` probe for the full size doesn't work either: with gzip accepted, GitHub Pages answers with ranges of the gzipped representation. Resource values are read via `hasValue()` guards, since `value()` throws when a resource is in the error state.
 
 ### The tracks are gated by a secret (capability URL)
 
@@ -64,7 +70,7 @@ What it does (`GeoQuest25.Processing/Program.cs`):
 5. Exports the GPX paths as lines (`TrackExporter.cs`), one `MultiLineString` feature per activity, simplified with Douglas-Peucker (~5 m, 5 decimal places):
    - **Done activities → `ExportPmTiles`**: split wherever consecutive points are more than `MaxPointGapMeters` (5 km) apart, then piped through **tippecanoe** into a `.pmtiles`. The threshold is deliberately high so it only catches genuine "paused the recording and resumed far away" jumps — a train ride between two stations, which would otherwise be drawn as a straight line across the countryside — while ordinary GPS drop-outs (short tunnels, lost signal) keep their connecting line. At 5 km only ~8 activities split; an earlier 200 m threshold was far too granular (~150 activities, cutting tunnels and ski lifts). tippecanoe must be on PATH: `brew install tippecanoe` locally; the workflow builds it from source (cached).
    - **Planned routes → `ExportGeoJson`**: plain GeoJSON, and **never split**. They come from a route planner, so they are continuous by construction and sampled far more sparsely (median ~27 m, up to ~650 m on straight stretches) — applying the 200 m threshold shredded them into dozens of fragments.
-6. Walks up from CWD looking for `GeoQuest25.Frontend`, deletes the existing generated assets under `src/assets/`, writes new ones with fresh GUIDs, and rewrites the asset URLs in `src/app/app.component.ts`.
+6. Walks up from CWD looking for `GeoQuest25.Frontend`, deletes the existing generated assets under `src/assets/`, writes new ones with fresh GUIDs, and rewrites the asset URLs (plus the byte sizes of `visited` and `todo`) in `src/app/app.component.ts`.
 
 The shape file (public swisstopo data that rarely changes) is checked into the repo under `GeoQuest25.Processing/shapefiles/` and resolved relative to the repo root, so it is available both locally and after checkout in CI.
 

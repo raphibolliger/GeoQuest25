@@ -17,6 +17,28 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   </head>
   <body>
-    <app-root></app-root>
+    <app-root>
+      <div class="fixed inset-0 grid place-items-center p-4 pointer-events-none">
+        <div class="grid w-64 gap-3 rounded bg-white p-4 shadow" role="status">
+          <div class="font-semibold">Loading map</div>
+          <div class="grid grid-cols-[1.25rem_1fr_auto] items-center gap-x-2 gap-y-1">
+            <span class="size-5 animate-spin rounded-full border-2 border-gray-200 border-t-blue-500"></span>
+            <span>App</span>
+          </div>
+          <div class="grid grid-cols-[1.25rem_1fr_auto] items-center gap-x-2 gap-y-1">
+            <span class="size-5 rounded-full border-2 border-gray-200"></span>
+            <span class="text-gray-400">Base map</span>
+          </div>
+          <div class="grid grid-cols-[1.25rem_1fr_auto] items-center gap-x-2 gap-y-1">
+            <span class="size-5 rounded-full border-2 border-gray-200"></span>
+            <span class="text-gray-400">Municipalities</span>
+          </div>
+          <div class="grid grid-cols-[1.25rem_1fr_auto] items-center gap-x-2 gap-y-1">
+            <span class="size-5 rounded-full border-2 border-gray-200"></span>
+            <span class="text-gray-400">Drawing</span>
+          </div>
+        </div>
+      </div>
+    </app-root>
   </body>
 </html>

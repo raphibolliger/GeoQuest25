@@ -180,10 +180,10 @@ foreach (var pmtilesAssetFile in Directory.GetFiles(assetsPath, "*.pmtiles"))
     File.Delete(pmtilesAssetFile);
 
 var newVisitedFileName = $"visited-{Guid.NewGuid()}.geojson";
-await GenerateGeoJson(visited.ToArray(), $"{assetsPath}/{newVisitedFileName}");
+var newVisitedFileBytes = await GenerateGeoJson(visited.ToArray(), $"{assetsPath}/{newVisitedFileName}");
 
 var newTodoFileName = $"todo-{Guid.NewGuid()}.geojson";
-await GenerateGeoJson(todo.ToArray(), $"{assetsPath}/{newTodoFileName}");
+var newTodoFileBytes = await GenerateGeoJson(todo.ToArray(), $"{assetsPath}/{newTodoFileName}");
 
 // the planned routes as plain geojson: only a handful, and not sensitive (they are not
 // places the author actually goes), so unlike the tracks they are not secret-gated
@@ -207,8 +207,8 @@ Console.WriteLine($"PMTiles wurde nach {Path.Combine(assetsPath, newTracksFileNa
 var appComponentPath = Path.Combine(frontendPaht, "src/app/app.component.ts");
 
 var appComponentContent = await File.ReadAllTextAsync(appComponentPath);
-var newAppComponentContent = Regex.Replace(appComponentContent, @"visited-[0-9a-fA-F\-]+\.geojson", newVisitedFileName);
-newAppComponentContent = Regex.Replace(newAppComponentContent, @"todo-[0-9a-fA-F\-]+\.geojson", newTodoFileName);
+var newAppComponentContent = Regex.Replace(appComponentContent, @"visited-[0-9a-fA-F\-]+\.geojson', \d+", $"{newVisitedFileName}', {newVisitedFileBytes}");
+newAppComponentContent = Regex.Replace(newAppComponentContent, @"todo-[0-9a-fA-F\-]+\.geojson', \d+", $"{newTodoFileName}', {newTodoFileBytes}");
 newAppComponentContent = Regex.Replace(newAppComponentContent, @"planned-[0-9a-fA-F\-]+\.geojson", newPlannedRoutesFileName);
 newAppComponentContent = Regex.Replace(newAppComponentContent, @"tracks-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", newTracksFilePrefix);
 
@@ -229,7 +229,7 @@ static MunicipalityEntry[] UnvisitedCandidates(STRtree<MunicipalityEntry> index,
     return index.Query(trackEnvelope).Where(c => c.Municipality.FirstVisit is null).ToArray();
 }
 
-static async Task GenerateGeoJson(Municipality[] municipalities, string outputPath)
+static async Task<long> GenerateGeoJson(Municipality[] municipalities, string outputPath)
 {
     // FeatureCollection für GeoJSON erstellen
     var featureCollection = new FeatureCollection();
@@ -255,6 +255,7 @@ static async Task GenerateGeoJson(Municipality[] municipalities, string outputPa
     // In Datei schreiben
     await File.WriteAllTextAsync(outputPath, geoJsonString);
     Console.WriteLine($"GeoJSON wurde nach {outputPath} geschrieben.");
+    return new FileInfo(outputPath).Length;
 }
 
 string? SearchFrontendPath()

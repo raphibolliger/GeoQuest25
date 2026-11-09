@@ -323,6 +323,14 @@ export class AppComponent {
     this.showPosition.update((prev) => !prev);
   }
 
+  toggleTerrain(): void {
+    const showTerrain = !this.showTerrain();
+    this.showTerrain.set(showTerrain);
+    if (!showTerrain) {
+      this.map()?.easeTo({ pitch: 0, bearing: 0 });
+    }
+  }
+
   startPlannedLongPress(): void {
     this.#plannedLongPressFired = false;
     clearTimeout(this.#plannedLongPressTimer);

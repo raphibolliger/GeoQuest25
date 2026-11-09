@@ -82,7 +82,7 @@
   <div
     class="grid items-center justify-center aspect-square rounded p-2 cursor-pointer"
     [ngClass]="{ 'bg-white': !showTerrain(), 'bg-green-600': showTerrain(), 'text-white': showTerrain() }"
-    (click)="showTerrain.set(!showTerrain())"
+    (click)="toggleTerrain()"
     title="Toggle Terrain"
   >
     <span class="material-symbols-rounded text-3xl"> elevation </span>

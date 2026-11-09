@@ -1,8 +1,15 @@
-<mgl-map #map class="fixed inset-0" [style]="mapStyle()" [zoom]="[7.5]" [center]="[8.226667, 46.801111]" [antialias]="true" (mapLoad)="onLoad($event)" (idle)="onIdle()">
+<mgl-map #map class="fixed inset-0" [style]="mapStyle()" [zoom]="[7.5]" [center]="[8.226667, 46.801111]" [antialias]="true" [attributionControl]="false" (mapLoad)="onLoad($event)" (mapResize)="onResize()" (idle)="onIdle()">
   @let visited = visitedGeoJson(); @let todo = todoGeoJson();
 
-  <mgl-raster-dem-source id="mapbox-dem" [url]="'mapbox://mapbox.mapbox-terrain-dem-v1'" [tileSize]="512" [maxzoom]="14"> </mgl-raster-dem-source>
+  <mgl-raster-dem-source
+    id="terrain-dem"
+    [tiles]="terrainDemTiles"
+    [encoding]="'terrarium'"
+    [tileSize]="512"
+    [maxzoom]="14"
+  ></mgl-raster-dem-source>
   <mgl-control mglNavigation position="top-right"></mgl-control>
+  <mgl-control mglAttribution position="bottom-right" [customAttribution]="terrainDemAttribution"></mgl-control>
 
   <!-- visited -->
   @if (visited) {

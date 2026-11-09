@@ -3,7 +3,16 @@ import { httpResource } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, effect, linkedSignal, resource, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ExpressionSpecification, FillLayerSpecification, Map, MapEventType, MapMouseEvent } from 'mapbox-gl';
-import { ControlComponent, GeoJSONSourceComponent, LayerComponent, MapComponent, MarkerComponent, RasterDemSourceComponent, VectorSourceComponent } from 'ngx-mapbox-gl';
+import {
+  AttributionControlDirective,
+  ControlComponent,
+  GeoJSONSourceComponent,
+  LayerComponent,
+  MapComponent,
+  MarkerComponent,
+  RasterDemSourceComponent,
+  VectorSourceComponent,
+} from 'ngx-mapbox-gl';
 import { fromEvent } from 'rxjs';
 import { geoJsonResource } from './geojson-resource';
 
@@ -17,6 +26,10 @@ const markerIcon =
 
 const routesSecretLongPressMs = 4000;
 const bytesPerMegabyte = 1_000_000;
+const terrainDemTiles = ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'];
+const terrainDemAttribution = '<a href="https://mapterhorn.com/attribution">© Mapterhorn</a>';
+const smartphoneCameraDiagonalFovDegrees = 84;
+const mapboxMaxVerticalFovDegrees = 60;
 
 type LoadingState = 'pending' | 'active' | 'done' | 'failed';
 
@@ -38,6 +51,7 @@ interface LoadingStep {
     MarkerComponent,
     RasterDemSourceComponent,
     ControlComponent,
+    AttributionControlDirective,
     VectorSourceComponent,
   ],
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -46,6 +60,8 @@ interface LoadingStep {
 export class AppComponent {
   // consts
   readonly markerIcon = markerIcon;
+  readonly terrainDemTiles = terrainDemTiles;
+  readonly terrainDemAttribution = terrainDemAttribution;
 
   // keyboard events
   readonly #keydown = toSignal(fromEvent<KeyboardEvent>(document, 'keydown'));
@@ -55,6 +71,7 @@ export class AppComponent {
   readonly selectedMunicipality = signal<{ name: string; firstVisit: string | undefined } | undefined>(undefined);
   readonly showPosition = signal(false);
   readonly map = signal<Map | undefined>(undefined);
+  readonly mapCanvasSize = signal({ width: 0, height: 0 });
   readonly showTerrain = signal(false);
   readonly showPlanned = signal(false);
   readonly showTracks = signal(false);
@@ -64,6 +81,7 @@ export class AppComponent {
 
   #plannedLongPressTimer: ReturnType<typeof setTimeout> | undefined;
   #plannedLongPressFired = false;
+  #defaultVerticalFovDegrees = 0;
 
   // the tracks file name ends with the sha256 hash of the routes secret; only the
   // "tracks-<guid>" prefix (rewritten by the processing pipeline) is known here, the hash
@@ -250,18 +268,34 @@ export class AppComponent {
 
   // effects
   readonly terrainEffect = effect(() => {
-    const showTerrain = this.showTerrain();
     const map = this.map();
-    if (showTerrain) {
-      map?.setTerrain({ source: 'mapbox-dem', exaggeration: 2.5 });
-    } else {
-      map?.setTerrain(null);
+    if (map) {
+      applyTerrain(map, this.showTerrain());
+    }
+  });
+  readonly fieldOfViewEffect = effect(() => {
+    const map = this.map();
+    const { width, height } = this.mapCanvasSize();
+    if (map && width > 0 && height > 0) {
+      map.transform.fov = this.showTerrain() ? smartphoneCameraVerticalFovDegrees(width, height) : this.#defaultVerticalFovDegrees;
+      map.triggerRepaint();
     }
   });
 
   // view actions
   onLoad(event: { type: MapEventType; target: Map }): void {
-    this.map.set(event.target);
+    const map = event.target;
+    this.#defaultVerticalFovDegrees = map.transform.fov;
+    map.on('style.load', () => applyTerrain(map, this.showTerrain()));
+    this.mapCanvasSize.set(canvasSize(map));
+    this.map.set(map);
+  }
+
+  onResize(): void {
+    const map = this.map();
+    if (map) {
+      this.mapCanvasSize.set(canvasSize(map));
+    }
   }
 
   onIdle(): void {
@@ -324,6 +358,21 @@ export class AppComponent {
     this.showTracks.set(true);
     this.showRoutesSecretDialog.set(false);
   }
+}
+
+function applyTerrain(map: Map, showTerrain: boolean): void {
+  map.setTerrain(showTerrain ? { source: 'terrain-dem', exaggeration: 1 } : null);
+}
+
+function canvasSize(map: Map): { width: number; height: number } {
+  const canvas = map.getCanvas();
+  return { width: canvas.clientWidth, height: canvas.clientHeight };
+}
+
+function smartphoneCameraVerticalFovDegrees(width: number, height: number): number {
+  const halfDiagonalTan = Math.tan((smartphoneCameraDiagonalFovDegrees * Math.PI) / 360);
+  const halfVerticalTan = (halfDiagonalTan * height) / Math.hypot(width, height);
+  return Math.min((Math.atan(halfVerticalTan) * 360) / Math.PI, mapboxMaxVerticalFovDegrees);
 }
 
 function getProperties(properties: unknown): { name: string; firstVisit: string | undefined } | undefined {

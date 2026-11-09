@@ -28,6 +28,18 @@ Stack & conventions:
 - **`mapboxgl.workerUrl` is deliberately overridden in `app.config.ts`** to load the map worker from `assets/mapbox-gl-csp-worker.js` (copied from `node_modules` via the `assets` config in `angular.json`). Without this, the Vite dev server mangles the inlined worker blob and the PMTiles tile-provider plugin fails to load inside the worker (`__vite__injectQuery is not defined`) — tracks then silently don't render under `npm start`. Don't remove it.
 - **Styling:** Tailwind v4 (via `@tailwindcss/postcss`), SCSS for component styles. Prettier with an Angular HTML parser override.
 
+### 3D terrain
+
+The terrain toggle (`elevation` control) is tuned for realism, not drama:
+
+- **Elevation model:** `terrain-dem` comes from [Mapterhorn](https://mapterhorn.com) (`tiles.mapterhorn.com`, Terrarium-encoded WebP, 512 px), which serves swisstopo's swissALTI3D for Switzerland. Cliffs and ridges are much sharper than with `mapbox-terrain-dem-v1`, which smooths the Alps into blobs. The tiles are ~10× larger (~170 KB vs ~17 KB), but are only fetched while 3D is on. `maxzoom` is deliberately **14**: higher zooms add no visible detail, and beyond the border Mapterhorn's coverage thins out (e.g. around Como only up to z14), so a higher `maxzoom` would request missing tiles there.
+- **No exaggeration (`1`).** The original 2.5 made every mountain 2.5× too tall.
+- **Wider field of view while 3D is on.** Mapbox has a fixed vertical FOV of ~37°, which on a phone in portrait is only ~17° horizontally, like a telephoto lens. The FOV is derived from the diagonal of a smartphone main camera (84°) and the canvas size, clamped to Mapbox's internal maximum of 60° vertical (≈30° horizontal on a phone in portrait, ≈71° on a 4:3 desktop window). The default is restored when 3D is switched off. Mapbox has no public API for this; it is set via `map.transform.fov`, so check it after Mapbox upgrades.
+- **Terrain survives style switches:** `setStyle` drops the terrain, so it is re-applied on `style.load`. That event fires after `styledata`, which is when ngx-mapbox-gl re-adds its sources.
+- **Attribution:** Mapbox does not credit terrain-only sources, so "© Mapterhorn" is added via a custom `mglAttribution` control (the default control is disabled).
+
+Not achievable with Mapbox GL: a true eye-level view. The camera cannot pitch beyond 85° (never horizontal or upwards), and Mapbox keeps it a zoom-dependent minimum height above the terrain (hundreds of metres at typical zooms). That would need a different engine (e.g. Cesium, as in map.geo.admin.ch 3D).
+
 ### GeoJSON assets are generated, gitignored and cache-busted with GUIDs
 
 A pipeline run writes one `visited-<guid>.geojson`, one `todo-<guid>.geojson`, one `planned-<guid>.geojson` (the planned routes as lines) and one `tracks-<guid>-<hash>.pmtiles` into `src/assets/` (deleting any previous ones) and rewrites the asset URLs in `app.component.ts` to match. For `visited` and `todo` it also rewrites the file size in bytes that follows the URL (`geoJsonResource('./assets/visited-<guid>.geojson', <bytes>)`), which the loading indicator needs. The rewrite regex expects exactly that `', <bytes>` shape.

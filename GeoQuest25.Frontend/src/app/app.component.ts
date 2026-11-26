@@ -2,7 +2,7 @@ import { DatePipe, DecimalPipe, NgClass } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, effect, linkedSignal, resource, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ExpressionSpecification, FillLayerSpecification, Map, MapEventType, MapMouseEvent } from 'mapbox-gl';
+import { ExpressionSpecification, FillLayerSpecification, LayerSpecification, Map, MapEventType, MapMouseEvent } from 'mapbox-gl';
 import {
   AttributionControlDirective,
   ControlComponent,
@@ -15,6 +15,7 @@ import {
 } from 'ngx-mapbox-gl';
 import { fromEvent } from 'rxjs';
 import { geoJsonResource } from './geojson-resource';
+import { applyWaterMapStyle } from './water-map-style';
 
 const markerIcon =
   'data:image/svg+xml;charset=utf-8,' +
@@ -30,8 +31,15 @@ const terrainDemTiles = ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'];
 const terrainDemAttribution = '<a href="https://mapterhorn.com/attribution">© Mapterhorn</a>';
 const smartphoneCameraDiagonalFovDegrees = 84;
 const mapboxMaxVerticalFovDegrees = 60;
+const lightStyleUrl = 'mapbox://styles/mapbox/light-v11';
 
 type LoadingState = 'pending' | 'active' | 'done' | 'failed';
+type MapStyleSelection = 'light' | 'streets' | 'satellite' | 'water';
+
+interface LoadedStyle {
+  url: string;
+  layers: LayerSpecification[];
+}
 
 interface LoadingStep {
   label: string;
@@ -78,6 +86,7 @@ export class AppComponent {
   readonly showRoutesSecretDialog = signal(false);
   readonly routesSecretRejected = signal(false);
   readonly municipalitiesDrawn = signal(false);
+  readonly #loadedStyle = signal<LoadedStyle | undefined>(undefined);
 
   #plannedLongPressTimer: ReturnType<typeof setTimeout> | undefined;
   #plannedLongPressFired = false;
@@ -130,7 +139,7 @@ export class AppComponent {
   readonly plannedRoutesPaint = { 'line-color': '#FF0000', 'line-width': 2.5, 'line-opacity': 0.9 };
 
   // linked signals
-  readonly mapStyleSelection = linkedSignal<KeyboardEvent | undefined, 'light' | 'streets' | 'satellite'>({
+  readonly mapStyleSelection = linkedSignal<KeyboardEvent | undefined, MapStyleSelection>({
     source: this.#keydown,
     computation: (keydown, previous) => {
       if (keydown?.ctrlKey) {
@@ -140,6 +149,8 @@ export class AppComponent {
           return 'streets';
         } else if (keydown.key === '3') {
           return 'satellite';
+        } else if (keydown.key === '4') {
+          return 'water';
         }
       }
       return previous?.value ?? 'streets';
@@ -165,7 +176,7 @@ export class AppComponent {
       case 'satellite':
         return 'mapbox://styles/mapbox/satellite-streets-v12';
       default:
-        return 'mapbox://styles/mapbox/light-v11';
+        return lightStyleUrl;
     }
   });
 
@@ -273,6 +284,13 @@ export class AppComponent {
       applyTerrain(map, this.showTerrain());
     }
   });
+  readonly waterMapStyleEffect = effect(() => {
+    const map = this.map();
+    const loadedStyle = this.#loadedStyle();
+    if (map && loadedStyle?.url === lightStyleUrl && this.mapStyle() === lightStyleUrl) {
+      applyWaterMapStyle(map, loadedStyle.layers, this.mapStyleSelection() === 'water');
+    }
+  });
   readonly fieldOfViewEffect = effect(() => {
     const map = this.map();
     const { width, height } = this.mapCanvasSize();
@@ -286,7 +304,11 @@ export class AppComponent {
   onLoad(event: { type: MapEventType; target: Map }): void {
     const map = event.target;
     this.#defaultVerticalFovDegrees = map.transform.fov;
-    map.on('style.load', () => applyTerrain(map, this.showTerrain()));
+    map.on('style.load', () => {
+      applyTerrain(map, this.showTerrain());
+      this.#loadedStyle.set({ url: this.mapStyle(), layers: map.getStyle().layers });
+    });
+    this.#loadedStyle.set({ url: this.mapStyle(), layers: map.getStyle().layers });
     this.mapCanvasSize.set(canvasSize(map));
     this.map.set(map);
   }

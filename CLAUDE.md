@@ -40,6 +40,13 @@ The terrain toggle (`elevation` control) is tuned for realism, not drama:
 
 Not achievable with Mapbox GL: a true eye-level view. The camera cannot pitch beyond 85° (never horizontal or upwards), and Mapbox keeps it a zoom-dependent minimum height above the terrain (hundreds of metres at typical zooms). That would need a different engine (e.g. Cesium, as in map.geo.admin.ch 3D).
 
+### Water map style (H2O)
+
+The fourth map style button (`H2O`, also `Ctrl+4`) is an aid for planning routes along rivers. It is **not** a style of its own: it uses the same `light-v11` URL as `SHP` and restyles it at runtime (`water-map-style.ts`) — lakes and rivers blue, rivers wider by class, roads and place names faded, POI labels hidden. Municipalities, tracks, planned routes and 3D are untouched.
+
+- **Switching `SHP` ↔ `H2O` does not reload the style** (same URL, so no `style.load` and no re-processing of the municipality GeoJSON). On every `style.load` the component snapshots the freshly loaded layers (`#loadedStyle`); the effect then sets either the water values or the snapshot's original values, so going back to `SHP` restores the base style exactly. The effect only runs when the loaded style *and* the selected style are `light-v11` — while switching from another style, the old style is left alone until the light style has loaded.
+- **Streams come from swisstopo, not Mapbox.** Mapbox Streets v8 only contains streams from zoom 13 on. From zoom 11 (fading in until 12) a raster overlay of the official swissTLM3D water network is added (`wmts.geo.admin.ch`, layer `ch.swisstopo.swisstlm3d-gewaessernetz`, free, attribution "© swisstopo" via the raster source). It shows every stream, piped sections dashed, but only inside Switzerland (`bounds`), and is inserted below the first symbol layer so labels and municipalities stay on top. Below zoom 12 it is deliberately hidden: every stream has the same line weight, so at overview zooms Aare and Reuss drown in the network — there the Mapbox rivers (wider by class) read much better.
+
 ### GeoJSON assets are generated, gitignored and cache-busted with GUIDs
 
 A pipeline run writes one `visited-<guid>.geojson`, one `todo-<guid>.geojson`, one `planned-<guid>.geojson` (the planned routes as lines) and one `tracks-<guid>-<hash>.pmtiles` into `src/assets/` (deleting any previous ones) and rewrites the asset URLs in `app.component.ts` to match. For `visited` and `todo` it also rewrites the file size in bytes that follows the URL (`geoJsonResource('./assets/visited-<guid>.geojson', <bytes>)`), which the loading indicator needs. The rewrite regex expects exactly that `', <bytes>` shape.
